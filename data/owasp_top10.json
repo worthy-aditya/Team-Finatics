@@ -1,0 +1,99 @@
+{
+  "metadata": {
+    "title": "OWASP Top 10:2025",
+    "source": "https://owasp.org/Top10/2025/",
+    "release_date": "2026-01",
+    "previous_version": "OWASP Top 10:2021",
+    "total_cwes_mapped": 248,
+    "cves_analyzed": 175000,
+    "notes": "First update to the OWASP Top 10 since 2021. Introduces two new categories (A03, A10) and consolidates SSRF into A01."
+  },
+  "categories": [
+    {
+      "rank": "A01:2025",
+      "name": "Broken Access Control",
+      "previous_rank_2021": "A01:2021",
+      "status": "unchanged_position",
+      "description": "Access control enforces policy such that users cannot act outside of their intended permissions. Failures typically lead to unauthorized information disclosure, modification, or destruction of data, or performing a business function outside the user's limits. This category now explicitly includes BOLA (Broken Object Level Authorization) and BFLA (Broken Function Level Authorization), and Server-Side Request Forgery (SSRF) has been consolidated into it.",
+      "cwe_count": 40
+    },
+    {
+      "rank": "A02:2025",
+      "name": "Security Misconfiguration",
+      "previous_rank_2021": "A05:2021",
+      "status": "moved_up",
+      "description": "Security misconfiguration occurs when a system, application, or cloud service is set up incorrectly from a security perspective, creating vulnerabilities. Examples include default accounts/credentials, unnecessary enabled features, open cloud storage buckets, and insecure HTTP headers.",
+      "cwe_count": 16
+    },
+    {
+      "rank": "A03:2025",
+      "name": "Software Supply Chain Failures",
+      "previous_rank_2021": "A06:2021 (Vulnerable and Outdated Components)",
+      "status": "new_expanded_category",
+      "description": "Breakdowns or compromises in the process of building, distributing, or updating software. Often caused by vulnerabilities or malicious changes in third-party code, tools, build systems, or distribution infrastructure. Has the highest average exploit and impact scores from CVE data despite low incidence.",
+      "cwe_count": 5
+    },
+    {
+      "rank": "A04:2025",
+      "name": "Cryptographic Failures",
+      "previous_rank_2021": "A02:2021",
+      "status": "moved_down",
+      "description": "Failures related to the lack of cryptography, insufficiently strong cryptography, leaking of cryptographic keys, and related errors. Previously known as Sensitive Data Exposure in the 2017 list.",
+      "cwe_count": null
+    },
+    {
+      "rank": "A05:2025",
+      "name": "Injection",
+      "previous_rank_2021": "A03:2021",
+      "status": "moved_down",
+      "description": "A system flaw that allows an attacker to insert malicious code or commands (such as SQL or shell code) into a program's input fields, tricking the system into executing them as if they were part of the system.",
+      "cwe_count": null
+    },
+    {
+      "rank": "A06:2025",
+      "name": "Insecure Design",
+      "previous_rank_2021": "A04:2021",
+      "status": "moved_down",
+      "description": "A broad category representing different weaknesses, expressed as missing or ineffective control design, rather than an implementation flaw.",
+      "cwe_count": null
+    },
+    {
+      "rank": "A07:2025",
+      "name": "Authentication Failures",
+      "previous_rank_2021": "A07:2021 (Identification and Authentication Failures)",
+      "status": "renamed",
+      "description": "Occurs when an attacker is able to trick a system into recognizing an invalid or incorrect user as legitimate. Renamed for clarity from 'Identification and Authentication Failures'.",
+      "cwe_count": null
+    },
+    {
+      "rank": "A08:2025",
+      "name": "Software and Data Integrity Failures",
+      "previous_rank_2021": "A08:2021",
+      "status": "unchanged_position",
+      "description": "Relates to code and infrastructure that does not protect against integrity violations, such as insecure CI/CD pipelines or use of untrusted plugins/libraries without verification.",
+      "cwe_count": null
+    },
+    {
+      "rank": "A09:2025",
+      "name": "Security Logging & Alerting Failures",
+      "previous_rank_2021": "A09:2021 (Security Logging and Monitoring Failures)",
+      "status": "renamed",
+      "description": "Renamed to emphasize the importance of alerting functionality needed to trigger appropriate action on relevant logging events, since logging without alerting has minimal value in identifying security incidents.",
+      "cwe_count": null
+    },
+    {
+      "rank": "A10:2025",
+      "name": "Mishandling of Exceptional Conditions",
+      "previous_rank_2021": null,
+      "status": "new_category",
+      "description": "Occurs when programs fail to prevent, detect, and respond to unusual and unpredictable situations, leading to crashes, unexpected behavior, and sometimes vulnerabilities. Covers improper error handling, logical errors, and failing open scenarios.",
+      "cwe_count": 24
+    }
+  ],
+  "consolidations": [
+    {
+      "removed_category": "A10:2021 - Server-Side Request Forgery (SSRF)",
+      "absorbed_into": "A01:2025 - Broken Access Control"
+    }
+  ]
+}
