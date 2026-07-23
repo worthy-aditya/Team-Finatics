@@ -1,32 +1,81 @@
 import requests # type: ignore
 #This library lets Python communicate with web APIs.
 
-cve_id = "CVE-2021-44228"
-# CVE ID to search
+def lookup_cve(cve_id): 
+    # CVE ID to search
+    # NVD API endpoint
+    url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}"
 
-url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}"
-# NVD API endpoint
+    # Send GET request
+    try:
+        response = requests.get(url, timeout=10)
+    except requests.exceptions.RequestException as e:
+        print(f"Network Error: {e}")
+        return None
 
-response = requests.get(url)
-# Send GET request
+    if response.status_code == 200:
+        data = response.json()
 
-if response.status_code == 200:
+        if not data.get("vulnerabilities"):
+            print("No CVE found.")
+            return None
 
-    data = response.json()
+        # Safely extract CVE info
+        vulnerabilities = data.get("vulnerabilities", [])
+        if not vulnerabilities:
+            print("No data found for", cve_id)
+            return None
 
-    cve = data["vulnerabilities"][0]["cve"]
+        cve = vulnerabilities[0].get("cve", {})
+        nvd_url = f"https://nvd.nist.gov/vuln/detail/{cve['id']}"
+        metrics = cve.get("metrics", {})
+        score = "N/A"
+        severity = "UNKNOWN"
 
-    print("=" * 50)
-    print("CVE ID:", cve["id"])
-    print("Published:", cve["published"])
-    print("Last Modified:", cve["lastModified"])
-    print()
-    print("Description:")
-    print(cve["descriptions"][0]["value"])
-    print("=" * 50)
+        if "cvssMetricV31" in metrics:
+            cvss = metrics["cvssMetricV31"][0]["cvssData"]
+        elif "cvssMetricV30" in metrics:
+            cvss = metrics["cvssMetricV30"][0]["cvssData"]
+        elif "cvssMetricV2" in metrics:
+            cvss = metrics["cvssMetricV2"][0]["cvssData"]
+        else:
+            cvss = None
 
-else:
-    print("Error:", response.status_code)
+        if cvss:
+            score = cvss["baseScore"]
+            severity = cvss["baseSeverity"]
+
+        return {
+            "id": cve["id"],
+            "published": cve["published"],
+            "last_modified": cve["lastModified"],
+            "description": cve["descriptions"][0]["value"],
+            "severity": severity,
+            "cvss_score": score,
+            "nvd_url": nvd_url
+        }
+    
+    return None
+
+test_cases = [
+    "CVE-2021-44228",   # Valid (Log4Shell)
+    "CVE-2024-3094",    # Valid (XZ Utils)
+    "CVE-9999-999999"   # Invalid
+]
+
+for cve_id in test_cases:
+    print("\n" + "=" * 70)
+    print(f"Testing: {cve_id}")
+    print("=" * 70)
+
+    result = lookup_cve(cve_id)
+
+    if result:
+        print(result)
+    else:
+        print("CVE not found.")
+
+
 
 
 

@@ -106,9 +106,9 @@ for feature in enhancements:
     pdf.cell(5)
     pdf.cell(0, 8, f"- {feature}", ln=True)
 
-# =====================================
+# ====================================================================
 # Save PDF
-# =====================================
+# ====================================================================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
