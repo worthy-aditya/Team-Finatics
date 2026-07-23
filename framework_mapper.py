@@ -2,7 +2,7 @@
 framework_mapper.py
 
 Single entry point that combines OWASP Top 10:2025 mapping and
-MITRE ATT&CK technique mapping into one module.
+MITRE ATT&CK technique mapping (Enterprise, Mobile, ICS) into one module.
 
 Wraps owasp_mapper.map_keyword_to_owasp() and
 mitre_mapper.map_keyword_to_technique() so callers only need to
@@ -21,29 +21,40 @@ def map_to_owasp(keyword):
     return map_keyword_to_owasp(keyword)
 
 
-def map_to_mitre(keyword):
+def map_to_mitre(keyword, domain=None):
     """
     Map a keyword to its MITRE ATT&CK technique.
-    Returns a dict (id, name, description) or None.
+
+    Args:
+        keyword: search term, e.g. "phishing"
+        domain: optionally restrict to "enterprise", "mobile", or "ics".
+                Defaults to searching all three.
+
+    Returns a dict (id, name, description, domain) or None.
     """
-    return map_keyword_to_technique(keyword)
+    return map_keyword_to_technique(keyword, domain=domain)
 
 
-def map_keyword(keyword):
+def map_keyword(keyword, mitre_domain=None):
     """
     Map a single keyword against BOTH frameworks at once.
+
+    Args:
+        keyword: search term, e.g. "sql injection"
+        mitre_domain: optionally restrict the MITRE side of the lookup
+                      to one matrix ("enterprise", "mobile", or "ics").
 
     Returns a dict:
     {
         "keyword": "sql injection",
         "owasp": { ... } or None,
-        "mitre": { ... } or None
+        "mitre": { ... } or None   # includes "domain" field when matched
     }
     """
     return {
         "keyword": keyword,
         "owasp": map_to_owasp(keyword),
-        "mitre": map_to_mitre(keyword),
+        "mitre": map_to_mitre(keyword, domain=mitre_domain),
     }
 
 
@@ -60,6 +71,7 @@ if __name__ == "__main__":
             print("  OWASP -> No match")
 
         if result["mitre"]:
-            print(f"  MITRE -> {result['mitre']['id']} {result['mitre']['name']}")
+            m = result["mitre"]
+            print(f"  MITRE -> {m['id']} {m['name']} [{m['domain']}]")
         else:
             print("  MITRE -> No match")
