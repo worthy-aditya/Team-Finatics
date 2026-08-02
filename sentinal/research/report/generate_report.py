@@ -2,8 +2,20 @@ from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from datetime import datetime
+from cve.cve_search import search_cves 
 import os
 
+results = search_cves("Apache")
+
+dynamic_findings = []
+
+for cve in results:
+    dynamic_findings.append({
+        "port": "80",
+        "service": "Apache HTTP",
+        "severity": cve["severity"].title(),
+        "status": "Vulnerable"
+    })
 
 scan_info = {
     "target_ip": "192.168.1.10",
@@ -11,32 +23,7 @@ scan_info = {
     "generated_by": "SentinelAI CLI"
 }
 
-findings = [
-    {
-        "port": "22",
-        "service": "SSH",
-        "severity": "Low",
-        "status": "Open"
-    },
-    {
-        "port": "80",
-        "service": "HTTP",
-        "severity": "Medium",
-        "status": "Open"
-    },
-    {
-        "port": "443",
-        "service": "HTTPS",
-        "severity": "Low",
-        "status": "Open"
-    },
-    {
-        "port": "3389",
-        "service": "RDP",
-        "severity": "High",
-        "status": "Open"
-    }
-]
+findings = dynamic_findings
 
 # Create a new Word document
 document = Document()

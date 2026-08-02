@@ -35,7 +35,7 @@ def search_cves(keyword):
                     cvss = None
 
                 if cvss:
-                    print(cvss)
+                    #print(cvss)
                     score = cvss.get("baseScore", "N/A")
                     severity = cvss.get("baseSeverity", "UNKNOWN")
 
