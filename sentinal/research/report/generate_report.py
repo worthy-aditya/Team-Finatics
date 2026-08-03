@@ -1,5 +1,6 @@
 from docx import Document
 from docx.shared import Pt
+from docx.shared import RGBColor
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from datetime import datetime
 from cve.cve_search import search_cves 
@@ -77,6 +78,25 @@ for finding in findings:
     row[1].text = finding["service"]
     row[2].text = finding["severity"]
     row[3].text = finding["status"]
+
+    run = row[2].paragraphs[0].runs[0]
+
+    severity = finding["severity"].lower()
+
+    if severity == "critical":
+        run.font.color.rgb = RGBColor(255, 0, 0)
+
+    elif severity == "high":
+        run.font.color.rgb = RGBColor(255, 140, 0)
+
+    elif severity == "medium":
+        run.font.color.rgb = RGBColor(255, 192, 0)
+
+    elif severity == "low":
+        run.font.color.rgb = RGBColor(0, 128, 0)
+
+    else:
+        run.font.color.rgb = RGBColor(128, 128, 128)
 
 # ===============================
 # Summary
