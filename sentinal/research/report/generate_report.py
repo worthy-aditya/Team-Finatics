@@ -99,6 +99,48 @@ for finding in findings:
         run.font.color.rgb = RGBColor(128, 128, 128)
 
 # ===============================
+# Windows Event Logs
+# ===============================
+
+event_logs = [
+      {
+        "event_id": 4625,
+        "time": "02 August 2026, 11:15 AM",
+        "user": "Administrator",
+        "description": "Failed Login Attempt"
+    },
+    {
+        "event_id": 4720,
+        "time": "02 August 2026, 11:25 AM",
+        "user": "John",
+        "description": "New User Account Created"
+    }
+]
+
+document.add_heading("Windows Event Logs", level=2)
+# Create Event Log Table
+
+event_table = document.add_table(rows=1, cols=4)
+event_table.style = "Table Grid"
+
+header = event_table.rows[0].cells
+
+header[0].text = "Event ID"
+header[1].text = "Time"
+header[2].text = "User"
+header[3].text = "Description"
+
+#Add event logs to the table
+
+for log in event_logs:
+    row = event_table.add_row().cells
+
+    row[0].text = str(log["event_id"])
+    row[1].text = log["time"]
+    row[2].text = log["user"]
+    row[3].text = log["description"]
+
+# ===============================
 # Summary
 # ===============================
 
