@@ -65,15 +65,55 @@ KEYWORD_MAP = {
 
 
 def load_owasp_data(path=DEFAULT_DATA_PATH):
-    """Load the OWASP Top 10:2025 dataset from disk."""
+    """
+    Load the OWASP Top 10:2025 dataset from disk.
+
+    Args:
+        path (str): Path to the OWASP Top 10 JSON file.
+                     Defaults to "data/owasp_top10.json".
+
+    Returns:
+        dict: Parsed JSON with keys "metadata", "categories", "consolidations".
+
+    Raises:
+        FileNotFoundError: If the file does not exist at the given path.
+        json.JSONDecodeError: If the file is not valid JSON.
+
+    Example:
+        >>> data = load_owasp_data()
+        >>> len(data["categories"])
+        10
+    """
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def map_keyword_to_owasp(keyword, owasp_data=None):
     """
-    Take a keyword and return the matching OWASP Top 10:2025 category
-    (as a dict from owasp_top10.json), or None if no match is found.
+    Map a free-text keyword to its matching OWASP Top 10:2025 category.
+
+    Matching is case-insensitive and checks whether any known indicator
+    phrase (from KEYWORD_MAP) appears as a substring of the input keyword.
+    Longer, more specific phrases are checked before shorter ones, so
+    "sql injection" matches before the more general "injection".
+
+    Args:
+        keyword (str): Free-text security term, e.g. "sql injection".
+        owasp_data (dict, optional): Pre-loaded OWASP dataset (as returned
+            by load_owasp_data()). If not provided, it is loaded automatically
+            from DEFAULT_DATA_PATH.
+
+    Returns:
+        dict | None: The matching category dict (rank, name, description, ...)
+            from owasp_top10.json, or None if no keyword match is found.
+
+    Example:
+        >>> result = map_keyword_to_owasp("sql injection")
+        >>> result["rank"], result["name"]
+        ('A05:2025', 'Injection')
+
+        >>> map_keyword_to_owasp("banana smoothie")  # no match
+        None
     """
     if not keyword or not isinstance(keyword, str):
         return None

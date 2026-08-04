@@ -27,7 +27,22 @@ _TECHNIQUE_CACHE = None
 
 
 def load_mitre_data(path):
-    """Load a raw MITRE ATT&CK STIX bundle from disk."""
+    """
+    Load a raw MITRE ATT&CK STIX 2.x bundle from disk.
+
+    Args:
+        path (str): Path to a MITRE ATT&CK JSON file
+                     (e.g. "data/enterprise-attack.json").
+
+    Returns:
+        dict: The parsed STIX bundle. The techniques live under the
+              "objects" key as items with "type": "attack-pattern".
+
+    Example:
+        >>> data = load_mitre_data("data/enterprise-attack.json")
+        >>> data["objects"][0]["type"]
+        'attack-pattern'
+    """
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -35,7 +50,14 @@ def load_mitre_data(path):
 def _get_technique_id(stix_object):
     """
     Extract the T-number (e.g. 'T1059') from a STIX attack-pattern object's
-    external_references. Returns None if not found.
+    external_references list.
+
+    Args:
+        stix_object (dict): A single STIX object of type "attack-pattern".
+
+    Returns:
+        str | None: The MITRE technique ID (e.g. "T1059.001"), or None
+            if no mitre-attack reference is present.
     """
     for ref in stix_object.get("external_references", []):
         if ref.get("source_name") == "mitre-attack":
@@ -45,8 +67,18 @@ def _get_technique_id(stix_object):
 
 def _build_technique_index(mitre_data, domain):
     """
-    Build a flat list of techniques from a STIX bundle, each as:
-    {"id": "T1059", "name": "...", "description": "...", "domain": "enterprise"}
+    Build a flat list of techniques from a STIX bundle.
+
+    Filters out revoked and deprecated techniques, since those no longer
+    represent current, valid ATT&CK techniques.
+
+    Args:
+        mitre_data (dict): Parsed STIX bundle (from load_mitre_data()).
+        domain (str): Label for which matrix this data came from
+                       ("enterprise", "mobile", or "ics").
+
+    Returns:
+        list[dict]: Each item is {"id", "name", "description", "domain"}.
     """
     techniques = []
     for obj in mitre_data.get("objects", []):
@@ -70,10 +102,18 @@ def _build_technique_index(mitre_data, domain):
 
 def _get_technique_index(sources=None, force_reload=False):
     """
-    Return the cached combined technique index across all matrices,
-    building it if needed.
+    Return the cached, combined technique index across all matrices,
+    building it from disk if it hasn't been built yet.
 
-    `sources` lets tests override with custom {domain: path} dicts.
+    Args:
+        sources (dict, optional): Custom {domain: path} mapping, used to
+            inject test fixtures instead of the real large datasets.
+            When provided, results are NOT cached (so tests stay isolated).
+        force_reload (bool): If True, rebuild the cache from DATA_SOURCES
+            even if it already exists.
+
+    Returns:
+        list[dict]: Combined technique list across all requested matrices.
     """
     global _TECHNIQUE_CACHE
     if _TECHNIQUE_CACHE is None or force_reload or sources is not None:
@@ -93,22 +133,36 @@ def _get_technique_index(sources=None, force_reload=False):
 
 def map_keyword_to_technique(keyword, sources=None, domain=None):
     """
-    Take a threat-related keyword and return the best-matching MITRE ATT&CK
-    technique as a dict: {"id", "name", "description", "domain"}.
+    Map a threat-related keyword to the best-matching MITRE ATT&CK technique.
 
-    Returns None if no match is found.
+    Matching strategy (first match wins, checked in this order):
+      1. Exact (case-insensitive) match against the technique name.
+      2. Keyword found as a substring within the technique name.
+      3. Keyword found within the technique description (weaker fallback).
 
     Args:
-        keyword: the search term, e.g. "phishing"
-        sources: optional {domain: path} override (used in tests)
-        domain: optionally restrict the search to one matrix only
-                ("enterprise", "mobile", or "ics"). Defaults to all three.
+        keyword (str): Search term, e.g. "phishing" or "powershell".
+        sources (dict, optional): Custom {domain: path} override, used
+            in tests instead of the real datasets.
+        domain (str, optional): Restrict the search to a single matrix
+            ("enterprise", "mobile", or "ics"). Defaults to searching
+            all three.
 
-    Matching strategy:
-      1. Exact (case-insensitive) match against technique name.
-      2. Keyword found as a substring within the technique name.
-      3. Keyword found within the technique description (weaker match,
-         used only if nothing matched on the name).
+    Returns:
+        dict | None: {"id": "T1566", "name": "Phishing",
+            "description": "...", "domain": "enterprise"}, or None if
+            no technique matches.
+
+    Example:
+        >>> result = map_keyword_to_technique("phishing")
+        >>> result["id"], result["domain"]
+        ('T1566', 'enterprise')
+
+        >>> map_keyword_to_technique("nonsense keyword xyz")  # no match
+        None
+
+        >>> map_keyword_to_technique("phishing", domain="mobile")
+        {'id': 'T1660', 'name': 'Phishing', ...}
     """
     if not keyword or not isinstance(keyword, str):
         return None
