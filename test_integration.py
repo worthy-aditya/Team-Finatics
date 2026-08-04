@@ -57,7 +57,7 @@ def test_end_to_end_handles_no_match_gracefully():
     benign_output = """
 PORT     STATE SERVICE      VERSION
 80/tcp   open  http         Apache httpd 2.4.41
-""" git add nmap_parser.py test_integration.py
+"""
     services = parse_nmap_output(benign_output)
     keywords = extract_keywords(services)
     assert keywords == []
