@@ -217,6 +217,56 @@ for category in owasp_mappings:
 document.add_paragraph()
 
 # ===============================
+# Sample Remediation Steps
+# ===============================
+
+remediation_steps = [
+    {
+        "finding": "Apache HTTP Server",
+        "severity": "High",
+        "fix": [
+            "Update Apache to the latest stable version.",
+            "Apply all available security patches.",
+            "Disable unnecessary Apache modules.",
+            "Enable HTTPS using a valid TLS certificate."
+        ]
+    },
+    {
+        "finding": "Failed Login Attempts",
+        "severity": "Medium",
+        "fix": [
+            "Review failed login attempts.",
+            "Enable account lockout policy.",
+            "Use strong passwords.",
+            "Enable Multi-Factor Authentication (MFA)."
+        ]
+    }
+]
+
+# ===============================
+# Remediation Steps
+# ===============================
+
+document.add_heading("Remediation Steps", level=2)
+
+for item in remediation_steps:
+
+    document.add_heading(
+        f"{item['finding']} ({item['severity']} Severity)",
+        level=3
+    )
+
+    for step in item["fix"]:
+        document.add_paragraph(
+            step,
+            style="List Bullet"
+        )
+
+    document.add_paragraph()
+
+    
+
+# ===============================
 # Summary
 # ===============================
 
