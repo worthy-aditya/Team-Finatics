@@ -140,6 +140,82 @@ for log in event_logs:
     row[2].text = log["user"]
     row[3].text = log["description"]
 
+document.add_paragraph()
+
+
+   # ===============================
+# Sample MITRE ATT&CK Mapping
+# ===============================
+
+mitre_mappings = [
+    {
+        "technique_id": "T1021",
+        "technique_name": "Remote Services"
+    },
+    {
+        "technique_id": "T1110",
+        "technique_name": "Brute Force"
+    }
+]
+
+# ===============================
+# Sample OWASP Mapping
+# ===============================
+
+owasp_mappings = [
+    {
+        "category": "A06",
+        "name": "Vulnerable and Outdated Components"
+    },
+    {
+        "category": "A07",
+        "name": "Identification and Authentication Failures"
+    }
+] 
+
+document.add_heading("MITRE ATT&CK Mapping", level=2)
+
+# Create MITRE Table
+mitre_table = document.add_table(rows=1, cols=2)
+mitre_table.style = "Table Grid"
+
+header = mitre_table.rows[0].cells
+
+header[0].text = "Technique ID"
+header[1].text = "Technique Name"
+
+for technique in mitre_mappings:
+
+    row = mitre_table.add_row().cells
+
+    row[0].text = technique["technique_id"]
+    row[1].text = technique["technique_name"]
+
+document.add_paragraph()
+
+# ===============================
+# OWASP Top 10 Mapping
+# ===============================
+
+document.add_heading("OWASP Top 10 Mapping", level=2)
+
+owasp_table = document.add_table(rows=1, cols=2)
+owasp_table.style = "Table Grid"
+
+header = owasp_table.rows[0].cells
+
+header[0].text = "Category"
+header[1].text = "OWASP Vulnerability"
+
+for category in owasp_mappings:
+
+    row = owasp_table.add_row().cells
+
+    row[0].text = category["category"]
+    row[1].text = category["name"]
+
+document.add_paragraph()
+
 # ===============================
 # Summary
 # ===============================
@@ -249,3 +325,23 @@ os.startfile(output_file)
 #
 # This serves as the initial report template for SentinelAI CLI.
 # ============================================================
+
+
+# ============================================================
+# MITRE ATT&CK Mapping
+
+# Displays MITRE ATT&CK techniques mapped
+# to identified security findings.
+# Currently uses sample data.
+# Future integration will consume the
+# mapping engine output automatically.
+
+# ============================================================
+# ===============================
+# OWASP Top 10 Mapping
+# ===============================
+# Displays OWASP Top 10 categories
+# associated with detected vulnerabilities.
+# Currently uses sample mappings.
+# Future versions will integrate with
+# the OWASP mapping module.
