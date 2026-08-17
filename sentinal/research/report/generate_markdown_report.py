@@ -1,6 +1,8 @@
 import os
 from datetime import datetime
 from cve.cve_search import search_cves
+from .executive_summary import generate_executive_summary
+
 
 
 def generate_markdown_report():
@@ -38,6 +40,12 @@ def generate_markdown_report():
             "description": "New User Account Created"
         }
     ]
+
+    
+    summary = generate_executive_summary(scan_info, findings)
+
+    markdown = "# Executive Summary\n\n"
+    markdown += summary + "\n\n"
 
     # ===============================
     # Sample MITRE ATT&CK Mapping
@@ -92,7 +100,6 @@ def generate_markdown_report():
         }
     ]
 
-    markdown = ""
     markdown += "# sentinalAI Security Report\n\n"
     markdown += "## Scan Information\n\n"
     markdown += f"- **Target IP:** {scan_info['target_ip']}\n"
