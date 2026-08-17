@@ -2,6 +2,7 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 from datetime import datetime
 from cve.cve_search import search_cves 
+from .executive_summary import generate_executive_summary
 import os
 
 
@@ -131,6 +132,16 @@ def generate_pdf_report():
     )
 
     pdf.ln(8)
+
+    
+    summary = generate_executive_summary(scan_info, findings)
+
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, "Executive Summary", new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_font("Helvetica", size=11)
+    pdf.multi_cell(0, 8, summary)
+    pdf.ln(4)
 
     # =====================================
     # Scan Information

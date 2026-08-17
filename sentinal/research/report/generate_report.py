@@ -1,9 +1,12 @@
+from pydoc import doc
+
 from docx import Document
 from docx.shared import Pt
 from docx.shared import RGBColor
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from datetime import datetime
 from cve.cve_search import search_cves 
+from .executive_summary import generate_executive_summary
 import os
 
 def generate_docx_report():
@@ -38,6 +41,15 @@ def generate_docx_report():
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
     document.add_paragraph()
+
+    # ===============================
+    # Executive Summary
+    # ===============================
+
+    summary = generate_executive_summary(scan_info, findings)
+
+    document.add_heading("Executive Summary", level=1)
+    document.add_paragraph(summary)
 
     # ===============================
     # Scan Information

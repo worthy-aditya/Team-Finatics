@@ -1,7 +1,4 @@
 import sys
-from sentinal.research.report.generate_report import generate_docx_report
-from sentinal.research.report.generate_pdf_report import generate_pdf_report
-from sentinal.research.report.generate_markdown_report import generate_markdown_report
 
 
 def main():
@@ -17,12 +14,26 @@ def main():
     choice = input("\nEnter choice (1-4): ").strip()
 
     if choice == "1":
+        try:
+            from sentinal.research.report.generate_report import generate_docx_report
+        except ModuleNotFoundError:
+            print("DOCX export requires the 'python-docx' package. Install it with: pip install python-docx")
+            return
+
         print("\nGenerating DOCX report...")
         generate_docx_report()
     elif choice == "2":
+        try:
+            from sentinal.research.report.generate_pdf_report import generate_pdf_report
+        except ModuleNotFoundError:
+            print("PDF export requires the 'fpdf' package. Install it with: pip install fpdf")
+            return
+
         print("\nGenerating PDF report...")
         generate_pdf_report()
     elif choice == "3":
+        from sentinal.research.report.generate_markdown_report import generate_markdown_report
+
         print("\nGenerating Markdown report...")
         generate_markdown_report()
     elif choice == "4":
