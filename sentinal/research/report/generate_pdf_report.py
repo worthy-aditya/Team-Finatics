@@ -3,6 +3,7 @@ from fpdf.enums import XPos, YPos
 from datetime import datetime
 from cve.cve_search import search_cves 
 from .executive_summary import generate_executive_summary
+from .version_manager import next_version
 import os
 
 
@@ -656,22 +657,8 @@ def generate_pdf_report():
     # Save PDF
     # =====================================
 
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-    OUTPUT_DIR = os.path.join(
-        BASE_DIR,
-        "output"
-    )
-
-    os.makedirs(
-        OUTPUT_DIR,
-        exist_ok=True
-    )
-
-    output_file = os.path.join(
-        OUTPUT_DIR,
-        "SentinelAI_Report.pdf"
-    )
+    version = next_version(scan_info["target_ip"])
+    output_file = f"reports/pdf/report_v{version}.pdf"
 
     pdf.output(output_file)
 
@@ -679,7 +666,7 @@ def generate_pdf_report():
     print(f"Saved at: {output_file}")
 
     # Open PDF automatically on Windows
-    os.startfile(output_file)
+    os.startfile(os.path.abspath(output_file))
 
 
 # =====================================

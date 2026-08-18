@@ -1,4 +1,4 @@
-from pydoc import doc
+from sys import version
 
 from docx import Document
 from docx.shared import Pt
@@ -7,9 +7,11 @@ from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from datetime import datetime
 from cve.cve_search import search_cves 
 from .executive_summary import generate_executive_summary
+from .version_manager import next_version
 import os
 
 def generate_docx_report():
+    
     results = search_cves("Apache")
 
     dynamic_findings = []
@@ -29,6 +31,9 @@ def generate_docx_report():
     }
 
     findings = dynamic_findings
+
+    version = next_version(scan_info["target_ip"])
+    filename = f"reports/docx/report_v{version}.docx"
 
     # Create a new Word document
     document = Document()
@@ -342,26 +347,28 @@ def generate_docx_report():
     )
 
     # ===============================
-    # Save Report
+    # Save Versioned Report
     # ===============================
 
-    # Get the directory where this script is located
+    # Current version number (already generated earlier)
+    # version = next_version(scan_info["target_ip"])
+
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    # Create the output folder inside the report directory
-    OUTPUT_DIR = os.path.join(BASE_DIR, "output")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    # Go from report/ → research/ → sentinal/ → team-finatics/
+    PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, "..", "..", ".."))
 
-    # Full path of the report
-    output_file = os.path.join(OUTPUT_DIR, "SentinelAI_Report.docx")
+    DOCX_DIR = os.path.join(PROJECT_ROOT, "reports", "docx")
+    os.makedirs(DOCX_DIR, exist_ok=True)
 
-    # Save the document
+    output_file = os.path.join(DOCX_DIR, f"report_v{version}.docx")
+
     document.save(output_file)
 
     print("Report generated successfully!")
     print(f"Saved at: {output_file}")
 
-    # Open the report automatically (Windows)
+# Open automatically on Windows
     os.startfile(output_file)
 
 
