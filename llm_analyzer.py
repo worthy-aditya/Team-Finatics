@@ -213,7 +213,7 @@ def _gemini_backed_summary(findings, audience="general"):
             GEMINI_API_URL,
             params={"key": api_key},
             json=payload,
-            timeout=20,
+            timeout=45,
         )
 
         # Prefer explicit status handling so we can include the response
