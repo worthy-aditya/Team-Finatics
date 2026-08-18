@@ -24,8 +24,13 @@ Or store it in a local ".env" file that is listed in .gitignore.
 """
 
 import os
+import sys
 
-GEMINI_MODEL = "gemini-2.0-flash"
+# Confirmed via a live 404 response from the Gemini API itself (which
+# explicitly instructed switching to this model), since Google periodically
+# retires older model versions. Can still be overridden via the
+# GEMINI_MODEL environment variable if this changes again in the future.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 GEMINI_API_URL = (
     f"https://generativelanguage.googleapis.com/v1beta/models/"
     f"{GEMINI_MODEL}:generateContent"
@@ -210,10 +215,26 @@ def _gemini_backed_summary(findings, audience="general"):
             json=payload,
             timeout=20,
         )
-        response.raise_for_status()
+
+        # Prefer explicit status handling so we can include the response
+        # body in diagnostics for 4xx/5xx responses (helps debug issues
+        # like an invalid model name or auth problem quickly).
+        if response.status_code != 200:
+            body = response.text or ""
+            short_body = body[:1000] + ("..." if len(body) > 1000 else "")
+            raise RuntimeError(
+                f"Gemini API returned {response.status_code}: {short_body}"
+            )
+
         data = response.json()
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        try:
+            text = data["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception:
+            raise RuntimeError(f"Unexpected Gemini response shape: {data}")
+
         return text.strip()
+    except requests.RequestException as e:
+        raise RuntimeError(f"Gemini request failed: {e}") from e
     except Exception as e:
         raise RuntimeError(f"Gemini API call failed: {e}") from e
 
@@ -257,9 +278,12 @@ def analyze_findings(findings, audience="general", use_llm=True):
     if use_llm:
         try:
             return _gemini_backed_summary(findings, audience=audience)
-        except RuntimeError:
-            # Silent, deliberate fallback — pipeline should never crash
-            # just because the AI backend is unavailable.
+        except RuntimeError as e:
+            # Print diagnostic to stderr so callers running scripts can
+            # see why the LLM backend failed, then fall back to the
+            # deterministic rule-based summary so the pipeline remains
+            # usable regardless.
+            print(f"Gemini error: {e}", file=sys.stderr)
             pass
 
     return _rule_based_summary(findings)
