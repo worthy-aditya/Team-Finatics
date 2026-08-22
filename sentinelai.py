@@ -9,10 +9,12 @@ from rich.console import Console
 from commands.scan import scan
 from commands.network import network
 from commands.report import report
+from commands.natural_cli import natural_cli
+from commands.analyze import analyze
 
 console = Console()
 
-@click.group()
+@click.group(help="SentinelAI - AI Powered Cybersecurity CLI Agent")
 @click.version_option(version="1.0.0", prog_name="SentinelAI")
 def cli():
     """
@@ -26,6 +28,8 @@ def cli():
 cli.add_command(scan)
 cli.add_command(network)
 cli.add_command(report)
+cli.add_command(natural_cli)
+cli.add_command(analyze)
 
 if __name__ == "__main__":
     cli()

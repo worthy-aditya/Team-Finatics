@@ -6,8 +6,10 @@ init(autoreset=True)
 
 @click.command()
 @click.option("--target", required=True, help="Target IP or hostname to scan")
-@click.option("--aggressive", is_flag=True, help="Run aggressive scan")
-def scan(target, aggressive):
+@click.option("--aggressive", is_flag=True, help="Run aggressive scan (slow, full port scan)")
+@click.option("--fast", is_flag=True, help="Run fast scan (top 20 ports only)")
+@click.option("--timeout", type=int, default=120, help="Scan timeout in seconds (default: 120)")
+def scan(target, aggressive, fast, timeout):
     """Run security scan on target using Nmap."""
     
     # Validate target
@@ -16,11 +18,18 @@ def scan(target, aggressive):
     
     click.echo(f"{Fore.CYAN}[*] Scanning target: {target}{Style.RESET_ALL}")
 
-    if aggressive:
+    if fast:
+        # Fast: top 20 most common ports
+        arguments = "-p 22,80,443,3306,5432,8080,8443,25,53,110,143,3389,1433,27017,5000,5900,9200,9300,11211,6379"
+        click.echo(f"{Fore.YELLOW}[*] Fast scan mode (top 20 ports) - ~30 seconds{Style.RESET_ALL}")
+    elif aggressive:
+        # Aggressive: full scan with scripts
         arguments = "-sV -sC -p 1-1000"
-        click.echo(f"{Fore.YELLOW}[*] Aggressive scan mode enabled{Style.RESET_ALL}")
+        click.echo(f"{Fore.YELLOW}[*] Aggressive scan mode (may take 5-10 minutes){Style.RESET_ALL}")
     else:
+        # Standard: service detection on common ports
         arguments = "-sV -p 1-1000"
+        click.echo(f"{Fore.YELLOW}[*] Standard scan mode (~2-3 minutes){Style.RESET_ALL}")
 
     scanner = NmapScanner(target)
 
