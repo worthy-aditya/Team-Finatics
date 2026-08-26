@@ -212,9 +212,16 @@ Team-Finatics/
     live validation: `--llm openai` refusal + full `--llm ollama` analysis
     via gemma4 (`day13_analysis_ollama.md`, all 5 sections)
   - Report: `WEEK_2_DAY_13_REPORT.md`
-
-### ⏳ PENDING (Week 2 — Days 14)
-- [ ] Day 14: Team sync — full demo of scan → LLM analysis pipeline
+- **Day 14:** Team-sync demo of the full pipeline (Week 2 capstone)
+  - One-command E2E demo `demo_day14_pipeline.py`: fresh Nmap scan → JSON →
+    refined prompt → LLM → programmatic 5-section verification → Markdown;
+    `--provider gemini|ollama`, `--skip-scan`, resume-safe
+  - Presenter cheat-sheet `DEMO_DAY14_SCRIPT.md`: pre-demo checklist,
+    one-command + manual flows, pitch, timings, fallback plans, Q&A
+  - Live run validated end-to-end on ollama/gemma4: scan 11.5 s, analysis
+    74.4 s, total 85.9 s wall, 5/5 sections (`day14_analysis_demo.md`)
+  - Report: `WEEK_2_DAY_14_REPORT.md`
+  - **Week 2 milestone MET: Nmap scans + AI plain-English analysis**
 
 ### ⏳ PENDING (Week 3 — Days 15-21)
 - [ ] Day 15: Windows Event Log prompt template
@@ -330,4 +337,4 @@ python sentinelai.py report --format text|json|csv
 2. **Start Week 3 (Days 15-21):** Windows Event Logs, remediation prompts, beginner mode, DOCX/PDF/MD reports
 3. **Week 4 (Days 22-30):** Integration, polish, demo rehearsal, merge to main
 
-**Current status: On schedule** — Week 1 complete, Week 2 through Day 13 complete.
+**Current status: On schedule** — Week 1 complete, **Week 2 COMPLETE (Days 8-14)**. Next: Week 3 (Event Logs, mapping, reports, tests).
