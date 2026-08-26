@@ -1,6 +1,9 @@
 import os
 from datetime import datetime
 from cve.cve_search import search_cves
+from .executive_summary import generate_executive_summary
+from .version_manager import next_version
+
 
 
 def generate_markdown_report():
@@ -38,6 +41,12 @@ def generate_markdown_report():
             "description": "New User Account Created"
         }
     ]
+
+    
+    summary = generate_executive_summary(scan_info, findings)
+
+    markdown = "# Executive Summary\n\n"
+    markdown += summary + "\n\n"
 
     # ===============================
     # Sample MITRE ATT&CK Mapping
@@ -92,7 +101,6 @@ def generate_markdown_report():
         }
     ]
 
-    markdown = ""
     markdown += "# sentinalAI Security Report\n\n"
     markdown += "## Scan Information\n\n"
     markdown += f"- **Target IP:** {scan_info['target_ip']}\n"
@@ -202,10 +210,8 @@ def generate_markdown_report():
     # Save Markdown Report
     # ===============================
 
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    output_dir = os.path.join(base_dir, "output")
-    os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, "SentinelAI_Report.md")
+    version = next_version(scan_info["target_ip"])
+    output_file = f"reports/md/report_v{version}.md"
 
     with open(output_file, "w", encoding="utf-8") as file:
         file.write(markdown)
@@ -213,7 +219,7 @@ def generate_markdown_report():
     print("Markdown report generated successfully!")
     print(f"Saved at: {output_file}")
 
-    os.startfile(output_file)
+    os.startfile(os.path.abspath(output_file))
 
 
 if __name__ == "__main__":
