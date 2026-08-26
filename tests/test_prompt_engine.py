@@ -328,6 +328,32 @@ def test_scan_analysis_result_field_defaults():
     assert result.usage == {}
 
 
+# ---------------------------------------------------------------------------
+# Day 13: LLM switcher (resolve_provider)
+# ---------------------------------------------------------------------------
+
+import sentinelai.prompt_engine as pe  # noqa: E402
+
+
+def test_resolve_provider_free_paths():
+    """The two FREE providers map cleanly (case-insensitive)."""
+    assert pe.resolve_provider("gemini") is LLMProvider.GEMINI
+    assert pe.resolve_provider("OLLAMA") is LLMProvider.OLLAMA
+    assert pe.resolve_provider(" Ollama ") is LLMProvider.OLLAMA
+
+
+def test_resolve_provider_paid_pending():
+    """openai/claude are accepted by the switcher but fail with guidance."""
+    for name in ("openai", "claude"):
+        with pytest.raises(RuntimeError, match="not wired up yet.*free providers", ):
+            pe.resolve_provider(name)
+
+
+def test_resolve_provider_unknown():
+    with pytest.raises(RuntimeError, match="Unknown LLM provider"):
+        pe.resolve_provider("chatgpt")
+
+
 if __name__ == "__main__":
     # Offline execution without pytest: run the pure-function checks.
     test_build_prompt_has_expected_sections(PromptMode.STANDARD, [
@@ -360,4 +386,7 @@ if __name__ == "__main__":
     test_openai_provider_not_implemented_yet()
     test_gemini_requires_api_key(None)  # offline: monkeypatch unused
     test_scan_analysis_result_field_defaults()
+    test_resolve_provider_free_paths()
+    test_resolve_provider_paid_pending()
+    test_resolve_provider_unknown()
     print("ALL prompt_engine TESTS PASSED (offline, pure functions)")

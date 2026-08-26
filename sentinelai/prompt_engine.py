@@ -65,6 +65,35 @@ class PromptMode(str, Enum):
     REMEDIATION = "remediation"
 
 
+# Providers wired up and usable today. OpenAI/Claude are paid-API integrations
+# planned for a later sprint day; Gemini (free tier) and Ollama (local) are the
+# free options the team uses right now (Days 9-12).
+ACTIVE_PROVIDERS = {LLMProvider.GEMINI, LLMProvider.OLLAMA}
+
+
+def resolve_provider(name: str) -> LLMProvider:
+    """Map a CLI/provider name to an LLMProvider enum member.
+
+    Raises a friendly RuntimeError for unknown names and for known-but-pending
+    providers (openai/claude), pointing users at the free alternatives.
+    """
+    try:
+        provider = LLMProvider(str(name).strip().lower())
+    except ValueError:
+        valid = ", ".join(p.value for p in LLMProvider)
+        raise RuntimeError(
+            f"Unknown LLM provider '{name}'. Valid providers: {valid}."
+        )
+    if provider not in ACTIVE_PROVIDERS:
+        free = ", ".join(sorted(p.value for p in ACTIVE_PROVIDERS))
+        raise RuntimeError(
+            f"LLM provider '{provider.value}' is not wired up yet (paid API, "
+            f"planned for a later sprint day). Currently available FREE "
+            f"providers: {free}."
+        )
+    return provider
+
+
 @dataclass
 class ScanAnalysisResult:
     """Structured result of a scan analysis (provider-agnostic).
@@ -411,17 +440,28 @@ def analyze_scan_file(
     output_file: Optional[PathLike] = DEFAULT_ANALYSIS_OUTPUT_FILE,
     preferred_model: Optional[str] = None,
     title: str = "Day 10 Nmap LLM Analysis",
+    provider: LLMProvider = LLMProvider.GEMINI,
 ) -> Tuple[str, str]:
-    """Analyze a scan JSON file and optionally save the Markdown output."""
+    """Analyze a scan JSON file with the given provider and save Markdown.
+
+    Day 13: routes through the unified analyze_scan_data() so --llm can pick
+    gemini (cloud) or ollama (local) without changing callers.
+    """
     scan_data = load_scan_data(input_file)
-    model, analysis = generate_nmap_analysis(scan_data, preferred_model=preferred_model)
+    result = analyze_scan_data(
+        scan_data, provider=provider, preferred_model=preferred_model
+    )
 
     if output_file:
         output_path = Path(output_file)
-        output = f"# {title}\n\nModel: `{model}`\n\n{analysis}\n"
+        output = (
+            f"# {title}\n\n"
+            f"Provider: {result.provider.value} | Model: `{result.model}`\n\n"
+            f"{result.analysis}\n"
+        )
         output_path.write_text(output, encoding="utf-8")
 
-        return model, analysis
+    return result.model, result.analysis
 
 
 # ---------------------------------------------------------------------------

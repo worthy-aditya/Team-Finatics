@@ -198,9 +198,22 @@ Team-Finatics/
     full 5-section localhost analysis → `day12_analysis_localhost.md`)
   - New wrapper: `test_day12_ollama_support.py` (resume-safe)
   - Report: `WEEK_2_DAY_12_REPORT.md`
+- **Day 13:** LLM switcher added — `--llm gemini|ollama|openai|claude`
+  - New flag on the `analyze` command (both CLI entry points): case-insensitive
+    choice, default `gemini`, plus provider-aware `--model` help text
+  - `resolve_provider()` maps names to `LLMProvider`; openai/claude are
+    accepted but fail with a friendly "not wired up yet (paid API)" message
+    pointing at the FREE providers (gemini, ollama) — team uses free tiers only
+  - `analyze_scan_file(provider=...)` now routes through the unified
+    `analyze_scan_data()`; output header shows `Provider | Model`;
+    also fixed a latent bug where `--no-save` returned None (early return
+    inside the `if output_file:` block)
+  - Tests: resolve_provider free/pending/unknown paths — all passing;
+    live validation: `--llm openai` refusal + full `--llm ollama` analysis
+    via gemma4 (`day13_analysis_ollama.md`, all 5 sections)
+  - Report: `WEEK_2_DAY_13_REPORT.md`
 
-### ⏳ PENDING (Week 2 — Days 13-14)
-- [ ] Day 13: Build LLM switcher — `--llm openai/claude/gemini/ollama` flag
+### ⏳ PENDING (Week 2 — Days 14)
 - [ ] Day 14: Team sync — full demo of scan → LLM analysis pipeline
 
 ### ⏳ PENDING (Week 3 — Days 15-21)
@@ -317,4 +330,4 @@ python sentinelai.py report --format text|json|csv
 2. **Start Week 3 (Days 15-21):** Windows Event Logs, remediation prompts, beginner mode, DOCX/PDF/MD reports
 3. **Week 4 (Days 22-30):** Integration, polish, demo rehearsal, merge to main
 
-**Current status: On schedule** — Week 1 complete, Week 2 through Day 12 complete.
+**Current status: On schedule** — Week 1 complete, Week 2 through Day 13 complete.
