@@ -19,6 +19,8 @@ import os
 import sys
 from pathlib import Path
 
+import requests
+
 # Make the repo importable when running as a plain script.
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -160,10 +162,133 @@ def test_default_models_for_provider_gemini():
     assert DEFAULT_GEMINI_MODELS[-1] in models
 
 
-def test_ollama_provider_not_implemented_yet():
-    """Day 11 wires only Gemini; Ollama (Day 12) must raise explicitly."""
-    with pytest.raises(NotImplementedError):
-        analyze_scan_data(SAMPLE_SCAN, provider=LLMProvider.OLLAMA)
+def test_ollama_unreachable_gives_clear_error():
+    """If the local Ollama server is down, users get an actionable error."""
+    import sentinelai.prompt_engine as pe
+
+    class _ConnErr:
+        exceptions = requests.exceptions  # real exception classes for except clauses
+
+        def get(self, *a, **k):
+            raise requests.exceptions.ConnectionError("refused")
+
+    saved = pe.requests
+    try:
+        pe.requests = _ConnErr()
+        with pytest.raises(RuntimeError, match="Cannot reach Ollama server"):
+            analyze_scan_data(SAMPLE_SCAN, provider=LLMProvider.OLLAMA)
+    finally:
+        pe.requests = saved
+
+
+def test_ollama_generate_parses_response():
+    """_call_ollama posts to /api/generate and parses text + usage correctly."""
+    import sentinelai.prompt_engine as pe
+
+    class _FakeResp:
+        status_code = 200
+
+        def raise_for_status(self_inner):
+            pass
+
+        def json(self_inner):
+            return {
+                "model": "gemma4",
+                "response": "## 1. Plain-English Summary\nLocalhost looks fine.",
+                "prompt_eval_count": 120,
+                "eval_count": 340,
+                "total_duration": 5_000_000_000,
+            }
+
+    class _FakeRequests:
+        def get(self_inner, url, **k):
+            class _Tags:
+                status_code = 200
+
+                def raise_for_status(self):
+                    pass
+
+                def json(self):
+                    return {"models": [{"name": "gemma4:latest"}]}
+
+            return _Tags()
+
+        def post(self_inner, url, json=None, **k):
+            assert url.endswith("/api/generate")
+            assert json["model"] == "gemma4:latest"
+            assert json["stream"] is False
+            return _FakeResp()
+
+    saved = pe.requests
+    try:
+        pe.requests = _FakeRequests()
+        result = analyze_scan_data(SAMPLE_SCAN, provider=LLMProvider.OLLAMA)
+        assert result.provider is LLMProvider.OLLAMA
+        assert result.model == "gemma4:latest"
+        assert result.analysis.startswith("## 1. Plain-English Summary")
+        assert result.usage["prompt_tokens"] == 120
+        assert result.usage["response_tokens"] == 340
+    finally:
+        pe.requests = saved
+
+
+def test_ollama_missing_model_advances_to_next_candidate():
+    """A 404 (model not pulled) advances to the next candidate instead of failing."""
+    import sentinelai.prompt_engine as pe
+
+    requested_models = []
+
+    class _Resp404:
+        status_code = 404
+
+        def raise_for_status(self_inner):
+            raise requests.exceptions.HTTPError("404")
+
+        def json(self_inner):
+            return {}
+
+    class _RespOK:
+        status_code = 200
+
+        def raise_for_status(self_inner):
+            pass
+
+        def json(self_inner):
+            return {
+                "model": "gemma4",
+                "response": "ok-analysis",
+                "prompt_eval_count": 10,
+                "eval_count": 20,
+                "total_duration": 1_000_000,
+            }
+
+    class _FakeRequests:
+        def get(self_inner, url, **k):
+            class _Tags:
+                status_code = 200
+
+                def raise_for_status(self):
+                    pass
+
+                def json(self):
+                    return {"models": [{"name": "llama3"}, {"name": "gemma4"}]}
+
+            return _Tags()
+
+        def post(self_inner, url, json=None, **k):
+            requested_models.append(json["model"])
+            return _Resp404() if json["model"] == "llama3" else _RespOK()
+
+    saved = pe.requests
+    try:
+        pe.requests = _FakeRequests()
+        model, text, usage = pe._call_ollama(prompt="p", retries=0)
+        # llama3 was missing (404); gemma4 answered.
+        assert model == "gemma4"
+        assert text == "ok-analysis"
+        assert requested_models[0] == "llama3"
+    finally:
+        pe.requests = saved
 
 
 def test_openai_provider_not_implemented_yet():
@@ -229,8 +354,10 @@ if __name__ == "__main__":
     test_build_nmap_analysis_prompt_backward_compatible()
     test_default_mode_is_standard()
     test_default_models_for_provider_gemini()
-    test_ollama_provider_not_implemented_yet()
+    test_ollama_unreachable_gives_clear_error()
+    test_ollama_generate_parses_response()
+    test_ollama_missing_model_advances_to_next_candidate()
     test_openai_provider_not_implemented_yet()
     test_gemini_requires_api_key(None)  # offline: monkeypatch unused
     test_scan_analysis_result_field_defaults()
-    print("ALL Day 11 prompt_engine TESTS PASSED (offline, pure functions)")
+    print("ALL prompt_engine TESTS PASSED (offline, pure functions)")

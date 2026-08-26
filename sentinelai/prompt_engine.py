@@ -15,6 +15,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple, Union
 
+import requests
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -38,6 +39,13 @@ GEMINI_REQUEST_TIMEOUT_MS = 300_000
 RETRYABLE_STATUS = {429, 500, 503}
 
 GEMINI_API_HOST = "generativelanguage.googleapis.com"
+
+# Ollama (Day 12): local server, no API key required. Override the host via
+# OLLAMA_HOST if the server runs on another machine/port.
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+# Local models can be slow on CPU-only machines; allow up to 10 minutes.
+OLLAMA_REQUEST_TIMEOUT_S = 600
+DEFAULT_OLLAMA_MODELS = ["llama3", "llama3.1", "gemma4"]
 
 
 class LLMProvider(str, Enum):
@@ -75,6 +83,7 @@ class ScanAnalysisResult:
 
 DEFAULT_MODEL_BY_PROVIDER: dict = {
     LLMProvider.GEMINI: "gemini-2.0-flash",
+    LLMProvider.OLLAMA: "llama3",
 }
 
 # Optional override via environment, e.g. GEMINI_MODEL=gemini-1.5-flash
@@ -424,28 +433,40 @@ def analyze_scan_data(
     preferred_model: Optional[str] = None,
     mode: PromptMode = PromptMode.STANDARD,
     retries: int = 2,
-    timeout_ms: int = GEMINI_REQUEST_TIMEOUT_MS,
+    timeout_ms: Optional[int] = None,
     api_key: Optional[str] = None,
 ) -> ScanAnalysisResult:
     """Analyze scan data with a pluggable provider.
 
-    Currently only Gemini is wired up (Day 11), but the signature is designed
-    so Day 12 (Ollama) and Day 13 (--llm switcher) can extend the dispatch
-    without changing callers.
+    Supports Gemini (cloud) and Ollama (local). The signature is designed so
+    Day 13 (--llm switcher / OpenAI / Claude) can extend the dispatch without
+    changing callers.
 
     Args:
         scan_data: structured scan dict.
-        provider: LLM to use (default Gemini).
+        provider: LLM to use (default Gemini; OLLAMA for local/private mode).
         preferred_model: model name to try first.
         mode: prompt template to use (STANDARD/BEGINNER/REMEDIATION).
         retries: per-model retry count for transient errors.
-        timeout_ms: per-request timeout in milliseconds.
-        api_key: explicit API key override; falls back to env/default provider.
+        timeout_ms: per-request timeout in milliseconds; None picks a
+            provider-aware default (300s Gemini, 600s Ollama — local models
+            can take minutes to load from disk on first use).
+        api_key: explicit API key override (ignored by Ollama); otherwise the
+            provider default env var is used.
 
     Returns:
         ScanAnalysisResult with provider, model, analysis, prompt, usage.
     """
     prompt = build_prompt(scan_data, mode=mode)
+
+    # Provider-aware default timeouts: local Ollama models may need minutes
+    # just to load weights into memory on first use (Day 12 lesson).
+    if timeout_ms is None:
+        timeout_ms = (
+            OLLAMA_REQUEST_TIMEOUT_S * 1000
+            if provider is LLMProvider.OLLAMA
+            else GEMINI_REQUEST_TIMEOUT_MS
+        )
 
     if provider is LLMProvider.GEMINI:
         model, analysis, usage = _call_gemini(
@@ -456,9 +477,13 @@ def analyze_scan_data(
             api_key=api_key,
         )
     elif provider is LLMProvider.OLLAMA:
-        # Placeholder for Day 12: Ollama uses a different HTTP path.
-        raise NotImplementedError(
-            "Ollama provider support is planned for Day 12."
+        # Day 12: Ollama runs a local HTTP server (default localhost:11434);
+        # no API key needed. api_key is accepted but ignored.
+        model, analysis, usage = _call_ollama(
+            prompt=prompt,
+            preferred_model=preferred_model,
+            retries=retries,
+            timeout_s=max(timeout_ms // 1000, 60),
         )
     else:
         raise NotImplementedError(
@@ -559,3 +584,99 @@ def _call_gemini(
     raise RuntimeError(
         "All Gemini model attempts failed:\n" + "\n".join(errors)
     )
+
+
+# ---------------------------------------------------------------------------
+# Day 12: Ollama provider — local models, private/offline mode
+# ---------------------------------------------------------------------------
+def check_ollama_server(timeout: int = 5) -> dict:
+    """Verify the local Ollama server is reachable; return its /api/tags payload."""
+    try:
+        resp = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.RequestException as exc:
+        raise RuntimeError(
+            f"Cannot reach Ollama server at {OLLAMA_HOST}. "
+            "Is Ollama installed and running? Start it with 'ollama serve' "
+            "(or any ollama command) and pull a model first, e.g. "
+            "'ollama pull llama3'. This is a local-server issue, not a prompt issue."
+        ) from exc
+
+
+def list_ollama_models() -> List[str]:
+    """Return model names available on the local Ollama server."""
+    payload = check_ollama_server()
+    names = []
+    for entry in payload.get("models", []):
+        name = entry.get("name") or entry.get("model")
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _ollama_model_candidates(preferred_model: Optional[str] = None) -> List[str]:
+    """Build the Ollama model candidate order: explicit → env → installed → defaults."""
+    candidates: List[str] = []
+    for model in (
+        preferred_model,
+        os.getenv("OLLAMA_MODEL"),
+        *list_ollama_models(),
+        *DEFAULT_OLLAMA_MODELS,
+    ):
+        if model and model not in candidates:
+            candidates.append(model)
+    return candidates
+
+
+def _call_ollama(
+    prompt: str,
+    preferred_model: Optional[str] = None,
+    retries: int = 1,
+    timeout_s: int = OLLAMA_REQUEST_TIMEOUT_S,
+) -> Tuple[str, str, dict]:
+    """Call the local Ollama /api/generate endpoint. Returns (model, text, usage).
+
+    Tries candidate models in order; a 404 (model not pulled) advances to the
+    next candidate, while transient failures honor the retry counter.
+    """
+    candidates = _ollama_model_candidates(preferred_model)
+    if not candidates:
+        raise RuntimeError(
+            "No Ollama models available. Pull one first, e.g. 'ollama pull llama3'."
+        )
+
+    errors: list = []
+    for model in candidates:
+        for attempt in range(retries + 1):
+            try:
+                resp = requests.post(
+                    f"{OLLAMA_HOST}/api/generate",
+                    json={
+                        "model": model,
+                        "prompt": prompt,
+                        "stream": False,
+                    },
+                    timeout=timeout_s,
+                )
+                if resp.status_code == 404:
+                    # Model not pulled locally — advance to the next candidate.
+                    errors.append(f"{model}: not found on Ollama server (404)")
+                    break
+                resp.raise_for_status()
+                data = resp.json()
+                usage = {
+                    "prompt_tokens": data.get("prompt_eval_count"),
+                    "response_tokens": data.get("eval_count"),
+                    "total_duration_ms": (data.get("total_duration") or 0) / 1e6,
+                }
+                return model, data.get("response", ""), usage
+            except requests.exceptions.RequestException as exc:
+                reason = f"{model} (attempt {attempt + 1}): {exc}"
+                errors.append(reason)
+                if attempt < retries:
+                    backoff = 5 * (2 ** attempt)
+                    print(f"[*] Retrying Ollama {model} in {backoff}s after: {exc}")
+                    time.sleep(backoff)
+
+    raise RuntimeError("All Ollama model attempts failed:\n" + "\n".join(errors))

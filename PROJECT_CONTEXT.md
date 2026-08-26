@@ -182,9 +182,24 @@ Team-Finatics/
   - Offline unit tests: `tests/test_prompt_engine.py` (runs via pytest or
     plain script) — all passing
   - Report: `WEEK_2_DAY_11_REPORT.md`
+- **Day 12:** Ollama support added — local LLM analysis (private/offline mode)
+  - `_call_ollama()` calls local Ollama REST API (`POST /api/generate`,
+    stream=False) via existing `requests` dependency; no API key needed
+  - Server helpers: `check_ollama_server()` (actionable error when down),
+    `list_ollama_models()` (auto-detects installed models, e.g. gemma4),
+    candidate order: explicit → `OLLAMA_MODEL` env → installed → defaults;
+    404 (model not pulled) advances to next candidate
+  - `analyze_scan_data(provider=LLMProvider.OLLAMA)` fully wired; host is
+    configurable via `OLLAMA_HOST` env; usage captures prompt/eval token counts
+  - Provider-aware default timeouts: 300s Gemini / 600s Ollama (local models
+    can take minutes to load weights on first use)
+  - Tests: mock-based offline tests for unreachable server, response parsing,
+    model-fallback behavior; live validation passed on gemma4:latest (smoke +
+    full 5-section localhost analysis → `day12_analysis_localhost.md`)
+  - New wrapper: `test_day12_ollama_support.py` (resume-safe)
+  - Report: `WEEK_2_DAY_12_REPORT.md`
 
-### ⏳ PENDING (Week 2 — Days 12-14)
-- [ ] Day 12: Add Ollama support — local Llama 3 via Ollama
+### ⏳ PENDING (Week 2 — Days 13-14)
 - [ ] Day 13: Build LLM switcher — `--llm openai/claude/gemini/ollama` flag
 - [ ] Day 14: Team sync — full demo of scan → LLM analysis pipeline
 
@@ -302,4 +317,4 @@ python sentinelai.py report --format text|json|csv
 2. **Start Week 3 (Days 15-21):** Windows Event Logs, remediation prompts, beginner mode, DOCX/PDF/MD reports
 3. **Week 4 (Days 22-30):** Integration, polish, demo rehearsal, merge to main
 
-**Current status: On schedule** — Week 1 complete, Week 2 through Day 11 complete.
+**Current status: On schedule** — Week 1 complete, Week 2 through Day 12 complete.
