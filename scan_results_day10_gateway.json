@@ -1,0 +1,192 @@
+{
+  "metadata": {
+    "target": "172.16.2.1",
+    "scan_timestamp": "2026-08-26T12:01:09.324206",
+    "scan_type": "nmap_security_scan"
+  },
+  "summary": {
+    "total_hosts_scanned": 1,
+    "total_hosts_up": 1,
+    "total_ports_scanned": 9,
+    "total_open_ports": 4,
+    "total_closed_ports": 5,
+    "total_filtered_ports": 0
+  },
+  "hosts": [
+    {
+      "address": "172.16.2.1",
+      "status": "up",
+      "hostnames": [
+        {
+          "name": "",
+          "type": ""
+        }
+      ],
+      "ports": [
+        {
+          "port": 22,
+          "protocol": "tcp",
+          "state": "open",
+          "service": {
+            "name": "ssh",
+            "product": "",
+            "version": "",
+            "extrainfo": "protocol 2.0"
+          },
+          "service_string": "ssh - protocol 2.0"
+        },
+        {
+          "port": 23,
+          "protocol": "tcp",
+          "state": "closed",
+          "service": {
+            "name": "telnet",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "telnet"
+        },
+        {
+          "port": 53,
+          "protocol": "tcp",
+          "state": "open",
+          "service": {
+            "name": "domain",
+            "product": "",
+            "version": "",
+            "extrainfo": "unknown banner: unknown"
+          },
+          "service_string": "domain - unknown banner: unknown"
+        },
+        {
+          "port": 80,
+          "protocol": "tcp",
+          "state": "open",
+          "service": {
+            "name": "http",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "http"
+        },
+        {
+          "port": 443,
+          "protocol": "tcp",
+          "state": "open",
+          "service": {
+            "name": "http",
+            "product": "ZyXEL ZyWALL http config",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "http (ZyXEL ZyWALL http config)"
+        },
+        {
+          "port": 445,
+          "protocol": "tcp",
+          "state": "closed",
+          "service": {
+            "name": "microsoft-ds",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "microsoft-ds"
+        },
+        {
+          "port": 3389,
+          "protocol": "tcp",
+          "state": "closed",
+          "service": {
+            "name": "ms-wbt-server",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "ms-wbt-server"
+        },
+        {
+          "port": 8080,
+          "protocol": "tcp",
+          "state": "closed",
+          "service": {
+            "name": "http-proxy",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "http-proxy"
+        },
+        {
+          "port": 8443,
+          "protocol": "tcp",
+          "state": "closed",
+          "service": {
+            "name": "https-alt",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "https-alt"
+        }
+      ],
+      "services": {
+        "22/tcp": {
+          "state": "open",
+          "name": "ssh",
+          "full_info": "ssh - protocol 2.0"
+        },
+        "23/tcp": {
+          "state": "closed",
+          "name": "telnet",
+          "full_info": "telnet"
+        },
+        "53/tcp": {
+          "state": "open",
+          "name": "domain",
+          "full_info": "domain - unknown banner: unknown"
+        },
+        "80/tcp": {
+          "state": "open",
+          "name": "http",
+          "full_info": "http"
+        },
+        "443/tcp": {
+          "state": "open",
+          "name": "http",
+          "full_info": "http (ZyXEL ZyWALL http config)"
+        },
+        "445/tcp": {
+          "state": "closed",
+          "name": "microsoft-ds",
+          "full_info": "microsoft-ds"
+        },
+        "3389/tcp": {
+          "state": "closed",
+          "name": "ms-wbt-server",
+          "full_info": "ms-wbt-server"
+        },
+        "8080/tcp": {
+          "state": "closed",
+          "name": "http-proxy",
+          "full_info": "http-proxy"
+        },
+        "8443/tcp": {
+          "state": "closed",
+          "name": "https-alt",
+          "full_info": "https-alt"
+        }
+      },
+      "protocol_summary": {
+        "tcp": {
+          "open": 4,
+          "closed": 5,
+          "filtered": 0,
+          "total_scanned": 9
+        }
+      }
+    }
+  ]
+}
