@@ -32,7 +32,7 @@ def generate_docx_report():
 
     findings = dynamic_findings
 
-    version = next_version(scan_info["target_ip"])
+    version = next_version(scan_info["target_ip"], findings)
     filename = f"reports/docx/report_v{version}.docx"
 
     # Create a new Word document

@@ -16,7 +16,8 @@ def initialize():
         with open(METADATA, "w") as f:
             json.dump({"latest_version": 0, "created_reports": []}, f, indent=4)
 
-def next_version(target_ip="Unknown"):
+def next_version(target_ip="Unknown", findings=None):
+
     initialize()
 
     with open(METADATA, "r") as f:
@@ -33,5 +34,21 @@ def next_version(target_ip="Unknown"):
 
     with open(METADATA, "w") as f:
         json.dump(data, f, indent=4)
+
+    # Save snapshot for comparison
+    snapshot_dir = REPORT_DIR / "snapshots"
+    snapshot_dir.mkdir(exist_ok=True)
+
+    snapshot_file = snapshot_dir / f"version_{version}.json"
+
+    snapshot_data = {
+        "version": version,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "target": target_ip,
+        "findings": findings or []
+    }
+
+    with open(snapshot_file, "w") as f:
+        json.dump(snapshot_data, f, indent=4)
 
     return version

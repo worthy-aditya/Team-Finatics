@@ -1,0 +1,37 @@
+{
+    "version": 11,
+    "timestamp": "2026-08-27 11:43:28",
+    "target": "192.168.1.10",
+    "findings": [
+        {
+            "port": "80",
+            "service": "Apache HTTP",
+            "severity": "High",
+            "status": "Vulnerable"
+        },
+        {
+            "port": "80",
+            "service": "Apache HTTP",
+            "severity": "Unknown",
+            "status": "Vulnerable"
+        },
+        {
+            "port": "80",
+            "service": "Apache HTTP",
+            "severity": "Unknown",
+            "status": "Vulnerable"
+        },
+        {
+            "port": "80",
+            "service": "Apache HTTP",
+            "severity": "Unknown",
+            "status": "Vulnerable"
+        },
+        {
+            "port": "80",
+            "service": "Apache HTTP",
+            "severity": "Unknown",
+            "status": "Vulnerable"
+        }
+    ]
+}
