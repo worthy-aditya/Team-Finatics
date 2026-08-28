@@ -240,9 +240,19 @@ Team-Finatics/
   - Offline tests green; live ollama/gemma4 validation produced all 5 sections
     (`day15_analysis_events.md`)
   - Report: `WEEK_3_DAY_15_REPORT.md`
+- **Day 16:** Event Log → LLM analysis testing
+  - 3 diverse scenario fixtures (`day16_scenario_benign/bruteforce.json` +
+    reused `day15_sample_events.json`); ground-truth severity kept out of input
+  - Resume-safe harness `test_day16_event_log_llm.py` — programmatic checks:
+    5/5 sections, no invented Event IDs (negation- and advice-aware), risk
+    posture vs ground truth; `--provider`, `--suffix`, `--self-test` offline mode
+  - Both FREE providers pass all 6 runs (ollama/gemma4 + gemini-3.6-flash):
+    zero fabricated Event IDs, correct severity per scenario
+  - Harness bugs found & fixed: WARN-overrides-FAIL priority, severity-label
+    scanning, audit-advice vs fabrication, negated-reference handling
+  - Report: `WEEK_3_DAY_16_REPORT.md`
 
 ### ⏳ PENDING (Week 3 — Days 15-21)
-- [ ] Day 16: Event Log → LLM analysis testing
 - [ ] Day 17: Remediation prompt layer
 - [ ] Day 18: Refine all prompts (v2)
 - [ ] Day 19: Beginner mode (`--beginner` flag)
@@ -355,5 +365,5 @@ python sentinelai.py report --format text|json|csv
 3. **Week 4 (Days 22-30):** Integration, polish, demo rehearsal, merge to main
 
 **Current status: On schedule** — Week 1 complete, **Week 2 COMPLETE (Days 8-14)**,
-**Week 3 started — Day 15 COMPLETE (Event Log prompt template)**. Next: Days 16-21
-(Event Log → LLM analysis, remediation prompts, beginner mode, report/MITRE/OWASP layers, tests).
+**Week 3: Days 15-16 COMPLETE (Event Log prompt template + LLM testing)**. Next: Days 17-21
+(Remediation prompts, Affan's `--logs`, beginner mode, report/MITRE/OWASP layers, tests).
