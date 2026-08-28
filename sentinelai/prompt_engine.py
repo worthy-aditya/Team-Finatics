@@ -24,6 +24,14 @@ from google.genai import types
 DEFAULT_SCAN_INPUT_FILE = Path("scan_results.json")
 DEFAULT_ANALYSIS_OUTPUT_FILE = Path("day9_nmap_llm_analysis.md")
 
+# Day 15 (Week 3): Windows Event Log analysis artifacts. The event-log JSON
+# schema is: {"source", "host", "collected_at", "count", "events": [...]},
+# where each event carries event_id, timestamp, level, channel, account,
+# domain, logon_type, source_ip, message, and an optional count (see
+# day15_sample_events.json for the exact contract Affan's parser must match).
+DEFAULT_EVENT_LOG_INPUT_FILE = Path("event_logs.json")
+DEFAULT_EVENT_LOG_ANALYSIS_OUTPUT_FILE = Path("day15_analysis_events.md")
+
 DEFAULT_GEMINI_MODELS = [
     "gemini-3.6-flash",
     "gemini-flash-latest",
@@ -46,6 +54,14 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 # Local models can be slow on CPU-only machines; allow up to 10 minutes.
 OLLAMA_REQUEST_TIMEOUT_S = 600
 DEFAULT_OLLAMA_MODELS = ["llama3", "llama3.1", "gemma4"]
+# Generation ceiling for /api/generate (tokens to predict) and context window.
+# gemma4 defaults to num_ctx=4096 TOTAL (prompt + output), so long
+# multi-section analyses (Nmap or Event Log) get cut off mid-sentence with
+# done_reason="length" ~2000 tokens in. 6144 is accepted by every local model
+# we use (8192 was rejected by gemma4), leaving room for comfortable output.
+# Override via OLLAMA_NUM_CTX / OLLAMA_NUM_PREDICT. (Day 15 lesson.)
+OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "6144"))
+OLLAMA_NUM_PREDICT = int(os.getenv("OLLAMA_NUM_PREDICT", "4096"))
 
 
 class LLMProvider(str, Enum):
@@ -276,6 +292,84 @@ Do not fabricate findings not present in the scan data. Keep it concise and
 actionable.
 """
 
+# Day 15 (Week 3): Windows Event Log analysis template. Mirrors the proven
+# 5-section structure of the Nmap prompt but is driven by Windows Security
+# event data (Event IDs such as 4624 logon, 4625 failed logon, 4720 user
+# created, 4672 special privileges, 1102 audit log cleared). Strictly
+# evidence-based: the model must derive every claim from the events list and
+# must not invent events.
+EVENT_LOG_ANALYSIS_PROMPT = """
+You are a senior Windows security analyst assistant helping a student understand
+the security implications of Windows Security event logs. Your analysis must be
+strictly evidence-based: base every conclusion only on the event data provided,
+and never claim a compromise or an attack occurred unless the events support it
+(e.g., correlate multiple 4625 failed logons with a later 4624 success before
+calling it a successful intrusion attempt).
+
+IMPORTANT CONTEXT: You are assisting with DEFENSIVE security education and
+hardening of the user's own computer or lab environment. The event log data
+below was collected as part of a learning exercise or authorized assessment.
+Focus on understanding, risk awareness, and remediation. Do NOT provide
+step-by-step exploitation instructions, attack playbooks, or specific exploit
+commands. Frame everything from a defender's perspective.
+
+Below is structured Windows Security Event Log data (JSON):
+
+{event_log_data}
+
+Produce a Markdown analysis with EXACTLY these sections, in this order:
+
+## 1. Plain-English Summary
+A short, beginner-friendly overview: which host the events come from, the time
+window covered, how many events were examined, which Security event IDs appear,
+and the overall picture in one or two sentences.
+
+## 2. Security Events (ranked by risk)
+For EACH distinct security-relevant event ID, provide a structured finding:
+- **Event #N - <description> (Event ID <id>)**
+  - Severity: <Critical|High|Medium|Low|Info> (score out of 10)
+  - Evidence from log: event_id, timestamp(s), account, logon_type, source_ip
+    exactly as reported
+  - Why it matters: plain-English explanation tied to the event ID and context
+    (e.g., 4625 = failed logon, possible brute force; 4720 = new user account
+    created, possible persistence; 1102 = audit log cleared, anti-forensics)
+Rank every finding from highest to lowest severity. Weigh COUNT and frequency:
+a burst of repeated failed logons is riskier than a single occurrence. If only
+routine/informational events exist, say so clearly and do not invent risk.
+
+## 3. What These Events Suggest
+- For DEFENSIVE awareness only: what a security analyst would infer from the
+  event mix (e.g., brute-force pattern, new account + privilege grants, clean
+  log), WITHOUT providing an attack walkthrough.
+- Correlate related events (4625 failures followed by a 4624 success from the
+  same source, 4720 new account plus 4672 special privileges) and state plainly
+  what the combination suggests a defender should check.
+- Clearly state what the logs PROVE and what they DO NOT prove (logs can show a
+  failed logon, but not the attacker's intent or whether a payload executed).
+
+## 4. Recommended Next Steps
+Split into two numbered groups, each tied to the specific events it addresses:
+### Immediate (investigation)
+Steps, tools, or commands a defender can run right now to confirm or rule out
+the suspicious activity (e.g., enumerate other logons from that source IP,
+inspect account changes, query via PowerShell Get-WinEvent or Event Viewer).
+### Medium-term (hardening)
+Concrete hardening actions for the specific scenario (account lockout / brute
+force policy, review and trim privileged-group memberships, enable additional
+auditing, restrict the source, enforce MFA). Reference standard Windows
+security guidance, but do not invent URLs.
+
+## 5. Confidence & Limitations
+- What this analysis is based on (event IDs, counts, source IPs, time window).
+- What could degrade confidence (truncated sample, cleared or missing events,
+  a single snapshot without history, spoofable fields such as source IP).
+- What is NOT covered and who should verify it (other log channels, antivirus,
+  network evidence).
+
+Do not fabricate events that are not present in the event log data. Keep it
+concise and actionable.
+"""
+
 
 def _select_prompt_template(mode: PromptMode) -> str:
     """Return the prompt template string for a given prompt mode."""
@@ -305,6 +399,37 @@ def build_nmap_analysis_prompt(
     return build_prompt(scan_data, mode=mode)
 
 
+def build_event_log_prompt(
+    event_log_data: dict, mode: PromptMode = PromptMode.STANDARD
+) -> str:
+    """Build a Windows Event Log analysis prompt (Day 15).
+
+    Formats structured Security event log JSON into the 5-section
+    EVENT_LOG_ANALYSIS_PROMPT template. Only the STANDARD variant exists
+    today; BEGINNER/REMEDIATION variants for event logs are planned for a
+    later Week 3 day (remediation prompt layer), so they raise a clear error
+    instead of silently reusing the Nmap templates on event data.
+
+    Args:
+        event_log_data: structured event log dict following the contract in
+            day15_sample_events.json:
+            {"source", "host", "collected_at", "count", "events": [{...}]}.
+        mode: prompt template to use (default STANDARD).
+    """
+    if mode is not PromptMode.STANDARD:
+        raise ValueError(
+            f"Event Log prompt mode '{mode.value}' is not built yet on Day 15. "
+            "The 'standard' event-log variant is available now; beginner and "
+            "remediation variants arrive later in Week 3."
+        )
+    return EVENT_LOG_ANALYSIS_PROMPT.format(
+        # Compact separators: the JSON payload is reference context, not the
+        # analysis — indenting it costs several hundred tokens of context that
+        # otherwise limit how long the generated analysis can be.
+        event_log_data=json.dumps(event_log_data, separators=(",", ":"))
+    )
+
+
 PathLike = Union[str, Path]
 
 
@@ -315,6 +440,16 @@ def load_scan_data(path: PathLike = DEFAULT_SCAN_INPUT_FILE) -> dict:
         raise FileNotFoundError(f"Missing scan input file: {scan_path}")
 
     with scan_path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_event_log_data(path: PathLike = DEFAULT_EVENT_LOG_INPUT_FILE) -> dict:
+    """Load structured Windows Event Log data from a JSON file (Day 15)."""
+    event_path = Path(path)
+    if not event_path.exists():
+        raise FileNotFoundError(f"Missing event log input file: {event_path}")
+
+    with event_path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -540,6 +675,108 @@ def analyze_scan_data(
     )
 
 
+# ---------------------------------------------------------------------------
+# Day 15 (Week 3): Windows Event Log analysis — same provider plumbing as the
+# Nmap flow, driven by the event-log prompt template. Affan's `--logs` parser
+# will feed structured event JSON here; the sample file (day15_sample_events.json)
+# lets this run end-to-end before the real parser lands.
+# ---------------------------------------------------------------------------
+def analyze_event_log_data(
+    event_log_data: dict,
+    provider: LLMProvider = LLMProvider.GEMINI,
+    preferred_model: Optional[str] = None,
+    mode: PromptMode = PromptMode.STANDARD,
+    retries: int = 2,
+    timeout_ms: Optional[int] = None,
+    api_key: Optional[str] = None,
+) -> ScanAnalysisResult:
+    """Analyze Windows Event Log data with a pluggable provider.
+
+    Mirrors analyze_scan_data() for the event-log template, so gemini (cloud
+    free tier) and ollama (local/private) work identically for log analysis.
+
+    Args:
+        event_log_data: structured event log dict (see build_event_log_prompt).
+        provider: LLM to use (default Gemini; OLLAMA for local/private mode).
+        preferred_model: model name to try first.
+        mode: prompt template to use (only STANDARD on Day 15).
+        retries: per-model retry count for transient errors.
+        timeout_ms: per-request timeout in milliseconds; None picks a
+            provider-aware default (300s Gemini, 600s Ollama).
+        api_key: explicit API key override (ignored by Ollama).
+
+    Returns:
+        ScanAnalysisResult with provider, model, analysis, prompt, usage.
+    """
+    prompt = build_event_log_prompt(event_log_data, mode=mode)
+
+    if timeout_ms is None:
+        timeout_ms = (
+            OLLAMA_REQUEST_TIMEOUT_S * 1000
+            if provider is LLMProvider.OLLAMA
+            else GEMINI_REQUEST_TIMEOUT_MS
+        )
+
+    if provider is LLMProvider.GEMINI:
+        model, analysis, usage = _call_gemini(
+            prompt=prompt,
+            preferred_model=preferred_model,
+            retries=retries,
+            timeout_ms=timeout_ms,
+            api_key=api_key,
+        )
+    elif provider is LLMProvider.OLLAMA:
+        model, analysis, usage = _call_ollama(
+            prompt=prompt,
+            preferred_model=preferred_model,
+            retries=retries,
+            timeout_s=max(timeout_ms // 1000, 60),
+        )
+    else:
+        raise NotImplementedError(
+            f"Provider '{provider.value}' integration is pending. "
+            "Gemini and Ollama are supported."
+        )
+
+    return ScanAnalysisResult(
+        provider=provider,
+        model=model,
+        analysis=analysis,
+        prompt=prompt,
+        usage=usage,
+    )
+
+
+def analyze_event_log_file(
+    input_file: PathLike = DEFAULT_EVENT_LOG_INPUT_FILE,
+    output_file: Optional[PathLike] = DEFAULT_EVENT_LOG_ANALYSIS_OUTPUT_FILE,
+    preferred_model: Optional[str] = None,
+    title: str = "Day 15 Event Log LLM Analysis",
+    provider: LLMProvider = LLMProvider.GEMINI,
+    mode: PromptMode = PromptMode.STANDARD,
+) -> Tuple[str, str]:
+    """Analyze an event log JSON file with the given provider, save Markdown.
+
+    Routes through analyze_event_log_data() so --llm can pick gemini (cloud)
+    or ollama (local) without changing callers.
+    """
+    event_log_data = load_event_log_data(input_file)
+    result = analyze_event_log_data(
+        event_log_data, provider=provider, preferred_model=preferred_model, mode=mode
+    )
+
+    if output_file:
+        output_path = Path(output_file)
+        output = (
+            f"# {title}\n\n"
+            f"Provider: {result.provider.value} | Model: `{result.model}`\n\n"
+            f"{result.analysis}\n"
+        )
+        output_path.write_text(output, encoding="utf-8")
+
+    return result.model, result.analysis
+
+
 def _call_gemini(
     prompt: str,
     preferred_model: Optional[str] = None,
@@ -696,6 +933,13 @@ def _call_ollama(
                         "model": model,
                         "prompt": prompt,
                         "stream": False,
+                        # Lift the output ceiling so long analyses complete;
+                        # num_ctx must also grow or generation stops early at
+                        # the default 4096-token window (context + output).
+                        "options": {
+                            "num_predict": OLLAMA_NUM_PREDICT,
+                            "num_ctx": OLLAMA_NUM_CTX,
+                        },
                     },
                     timeout=timeout_s,
                 )

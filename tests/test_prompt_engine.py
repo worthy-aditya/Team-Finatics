@@ -73,7 +73,9 @@ from sentinelai.prompt_engine import (  # noqa: E402
     LLMProvider,
     PromptMode,
     ScanAnalysisResult,
+    analyze_event_log_data,
     analyze_scan_data,
+    build_event_log_prompt,
     build_nmap_analysis_prompt,
     build_prompt,
     default_models_for_provider,
@@ -89,6 +91,75 @@ SAMPLE_SCAN = {
             "445": {"state": "open", "product": "microsoft-ds", "version": ""},
         }
     }
+}
+
+# Day 15: realistic Windows Security event log fixture (schema contract that
+# Affan's --logs parser must produce). Includes a brute-force pattern (4625 x14),
+# a new privileged account (4720 + 4728), a successful logon (4624/4672), and an
+# audit-log clear (1102) so tests exercise the full event-analysis prompt path.
+SAMPLE_EVENTS = {
+    "source": "Windows Security Event Log",
+    "host": "DESKTOP-7H3XK2D",
+    "collected_at": "2026-08-26T14:05:00Z",
+    "count": 18,
+    "events": [
+        {
+            "event_id": 1102,
+            "timestamp": "2026-08-26T12:00:03Z",
+            "level": "critical",
+            "channel": "Security",
+            "account": "SYSTEM",
+            "domain": None,
+            "logon_type": None,
+            "source_ip": None,
+            "logon_type_name": None,
+            "source_host": None,
+            "message": "The audit log was cleared.",
+            "count": 1,
+        },
+        {
+            "event_id": 4625,
+            "timestamp": "2026-08-26T13:40:12Z",
+            "level": "warning",
+            "channel": "Security",
+            "account": "Administrator",
+            "domain": "DESKTOP-7H3XK2D",
+            "logon_type": 3,
+            "logon_type_name": "Network",
+            "source_ip": "192.168.1.54",
+            "source_host": "unknown",
+            "message": "An account failed to log on.",
+            "count": 14,
+        },
+        {
+            "event_id": 4624,
+            "timestamp": "2026-08-26T13:55:01Z",
+            "level": "information",
+            "channel": "Security",
+            "account": "aditya",
+            "domain": "DESKTOP-7H3XK2D",
+            "logon_type": 2,
+            "logon_type_name": "Interactive",
+            "source_ip": "192.168.1.20",
+            "source_host": "DESKTOP-7H3XK2D",
+            "message": "An account was successfully logged on.",
+            "count": 1,
+        },
+        {
+            "event_id": 4720,
+            "timestamp": "2026-08-26T12:10:44Z",
+            "level": "warning",
+            "channel": "Security",
+            "account": "backupadmin",
+            "domain": "DESKTOP-7H3XK2D",
+            "logon_type": None,
+            "logon_type_name": None,
+            "source_ip": "192.168.1.54",
+            "source_host": "unknown",
+            "message": "A user account was created.",
+            "count": 1,
+        },
+    ],
 }
 # ---------------------------------------------------------------------------
 # build_prompt / build_nmap_analysis_prompt
@@ -354,6 +425,98 @@ def test_resolve_provider_unknown():
         pe.resolve_provider("chatgpt")
 
 
+# ---------------------------------------------------------------------------
+# Day 15: Windows Event Log prompt template + analysis entry point
+# ---------------------------------------------------------------------------
+
+EVENT_LOG_REQUIRED_SECTIONS = [
+    "## 1. Plain-English Summary",
+    "## 2. Security Events (ranked by risk)",
+    "## 3. What These Events Suggest",
+    "## 4. Recommended Next Steps",
+    "## 5. Confidence & Limitations",
+]
+
+
+def test_build_event_log_prompt_has_expected_sections():
+    prompt = build_event_log_prompt(SAMPLE_EVENTS)
+    for header in EVENT_LOG_REQUIRED_SECTIONS:
+        assert header in prompt, f"event log prompt missing: {header}"
+
+
+def test_build_event_log_prompt_includes_event_data():
+    prompt = build_event_log_prompt(SAMPLE_EVENTS)
+    for event in SAMPLE_EVENTS["events"]:
+        assert str(event["event_id"]) in prompt
+        assert event["account"] in prompt
+    assert SAMPLE_EVENTS["host"] in prompt
+
+
+def test_build_event_log_prompt_mode_not_built_yet():
+    """Only STANDARD exists on Day 15; beginner/remediation raise clearly."""
+    for mode in (PromptMode.BEGINNER, PromptMode.REMEDIATION):
+        with pytest.raises(ValueError, match="not built yet"):
+            build_event_log_prompt(SAMPLE_EVENTS, mode=mode)
+
+
+def test_analyze_event_log_data_via_ollama():
+    """Event-log analysis routes through the same Ollama /api/generate path."""
+    import sentinelai.prompt_engine as pe
+
+    class _FakeResp:
+        status_code = 200
+
+        def raise_for_status(self_inner):
+            pass
+
+        def json(self_inner):
+            return {
+                "model": "gemma4",
+                "response": "## 1. Plain-English Summary\nAudit log cleared.",
+                "prompt_eval_count": 90,
+                "eval_count": 250,
+                "total_duration": 3_000_000_000,
+            }
+
+    class _FakeRequests:
+        def get(self_inner, url, **k):
+            class _Tags:
+                status_code = 200
+
+                def raise_for_status(self):
+                    pass
+
+                def json(self):
+                    return {"models": [{"name": "gemma4:latest"}]}
+
+            return _Tags()
+
+        def post(self_inner, url, json=None, **k):
+            assert url.endswith("/api/generate")
+            assert json["model"] == "gemma4:latest"
+            return _FakeResp()
+
+    saved = pe.requests
+    try:
+        pe.requests = _FakeRequests()
+        result = analyze_event_log_data(SAMPLE_EVENTS, provider=LLMProvider.OLLAMA)
+        assert result.provider is LLMProvider.OLLAMA
+        assert result.model == "gemma4:latest"
+        assert result.analysis.startswith("## 1. Plain-English Summary")
+        # The event-log template (not the Nmap one) was used to build the prompt.
+        assert "## 2. Security Events (ranked by risk)" in result.prompt
+        assert "## 2. Risk Findings (ranked)" not in result.prompt
+    finally:
+        pe.requests = saved
+
+
+def test_load_event_log_data_missing_file():
+    import sentinelai.prompt_engine as pe
+
+    with pytest.raises(FileNotFoundError, match="Missing event log input file"):
+        pe.load_event_log_data("does_not_exist_events_xyz.json")
+
+
 if __name__ == "__main__":
     # Offline execution without pytest: run the pure-function checks.
     test_build_prompt_has_expected_sections(PromptMode.STANDARD, [
@@ -389,4 +552,9 @@ if __name__ == "__main__":
     test_resolve_provider_free_paths()
     test_resolve_provider_paid_pending()
     test_resolve_provider_unknown()
+    test_build_event_log_prompt_has_expected_sections()
+    test_build_event_log_prompt_includes_event_data()
+    test_build_event_log_prompt_mode_not_built_yet()
+    test_analyze_event_log_data_via_ollama()
+    test_load_event_log_data_missing_file()
     print("ALL prompt_engine TESTS PASSED (offline, pure functions)")

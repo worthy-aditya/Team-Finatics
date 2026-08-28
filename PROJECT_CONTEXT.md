@@ -223,8 +223,25 @@ Team-Finatics/
   - Report: `WEEK_2_DAY_14_REPORT.md`
   - **Week 2 milestone MET: Nmap scans + AI plain-English analysis**
 
+### ✅ COMPLETED (Week 3 — Days 15-21)
+- **Day 15:** Windows Event Log prompt template
+  - `EVENT_LOG_ANALYSIS_PROMPT`: evidence-based 5-section analysis of Windows
+    Security log JSON (1102/4624/4625/4672/4720/4728); count-aware ranking,
+    event correlation, defensive-only framing
+  - Full flow mirroring the Nmap pipeline: `load_event_log_data() →
+    build_event_log_prompt() → analyze_event_log_data(provider=gemini|ollama) →
+    analyze_event_log_file()` (Markdown, Provider | Model header)
+  - CLI `--kind scan|events` on the `analyze` command (both entry points)
+  - Sample contract for Affan's `--logs` parser: `day15_sample_events.json`
+  - Bug found & fixed: local models were truncating long analyses because
+    Ollama's default `num_ctx` (4096) caps prompt+output; `_call_ollama` now
+    sends `num_ctx=6144` + `num_predict=4096` (env-overridable), and the event
+    JSON is compacted to save prompt tokens
+  - Offline tests green; live ollama/gemma4 validation produced all 5 sections
+    (`day15_analysis_events.md`)
+  - Report: `WEEK_3_DAY_15_REPORT.md`
+
 ### ⏳ PENDING (Week 3 — Days 15-21)
-- [ ] Day 15: Windows Event Log prompt template
 - [ ] Day 16: Event Log → LLM analysis testing
 - [ ] Day 17: Remediation prompt layer
 - [ ] Day 18: Refine all prompts (v2)
@@ -337,4 +354,6 @@ python sentinelai.py report --format text|json|csv
 2. **Start Week 3 (Days 15-21):** Windows Event Logs, remediation prompts, beginner mode, DOCX/PDF/MD reports
 3. **Week 4 (Days 22-30):** Integration, polish, demo rehearsal, merge to main
 
-**Current status: On schedule** — Week 1 complete, **Week 2 COMPLETE (Days 8-14)**. Next: Week 3 (Event Logs, mapping, reports, tests).
+**Current status: On schedule** — Week 1 complete, **Week 2 COMPLETE (Days 8-14)**,
+**Week 3 started — Day 15 COMPLETE (Event Log prompt template)**. Next: Days 16-21
+(Event Log → LLM analysis, remediation prompts, beginner mode, report/MITRE/OWASP layers, tests).
