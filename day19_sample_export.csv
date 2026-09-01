@@ -1,0 +1,10 @@
+Date,Event ID,Level,Source,Message,Account,Domain,IP Address,Logon Type,Workstation,Computer,Count
+2026-08-28 08:02:11,4625,Warning,Microsoft-Windows-Security-Auditing,An account failed to log on.,svc_web,CORP,10.0.5.23,3,WORKSTATION-23,HOST-WEB01,1
+2026-08-28 08:02:44,4625,Warning,Microsoft-Windows-Security-Auditing,An account failed to log on.,svc_web,CORP,10.0.5.23,3,WORKSTATION-23,HOST-DB01,1
+2026-08-28 08:14:05,4648,Information,Microsoft-Windows-Security-Auditing,A logon was attempted using explicit credentials.,devops,CORP,10.0.5.23,9,WORKSTATION-23,HOST-WEB01,1
+2026-08-28 08:14:06,4624,Information,Microsoft-Windows-Security-Auditing,An account was successfully logged on.,devops,CORP,10.0.5.23,3,WORKSTATION-23,HOST-DB01,1
+2026-08-28 08:14:10,4672,Information,Microsoft-Windows-Security-Auditing,Special privileges assigned to new logon.,devops,CORP,10.0.5.23,2,WORKSTATION-23,HOST-DB01,1
+2026-08-28 08:21:33,5145,Information,Microsoft-Windows-Security-Auditing,A network share object was accessed.,devops,CORP,10.0.5.23,3,WORKSTATION-23,HOST-DB01,1
+2026-08-28 08:22:01,4663,Information,Microsoft-Windows-Security-Auditing,An attempt was made to access an object.,devops,CORP,10.0.5.23,3,WORKSTATION-23,HOST-DB01,1
+2026-08-28 08:35:22,4720,Warning,Microsoft-Windows-Security-Auditing,A user account was created.,devops,CORP,10.0.5.23,3,WORKSTATION-23,DC01,1
+2026-08-28 08:41:09,1102,Critical,Microsoft-Windows-Security-Auditing,The audit log was cleared.,SYSTEM,,,,,,HOST-DB01,1
