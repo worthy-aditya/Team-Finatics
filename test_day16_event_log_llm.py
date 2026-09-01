@@ -23,6 +23,7 @@ Run:
     python test_day16_event_log_llm.py --provider gemini   # cloud spot-check
     python test_day16_event_log_llm.py --self-test         # offline checks only
     python test_day16_event_log_llm.py --force             # re-run everything
+    python test_day16_event_log_llm.py --remediation       # Day 17 fix-it plans
 """
 
 import argparse
@@ -36,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from sentinelai.prompt_engine import (
     LLMProvider,
+    PromptMode,
     analyze_event_log_file,
     list_ollama_models,
 )
@@ -46,6 +48,15 @@ REQUIRED_SECTIONS = [
     "## 3. What These Events Suggest",
     "## 4. Recommended Next Steps",
     "## 5. Confidence & Limitations",
+]
+
+# Day 17: remediation variant produces a 4-section plan instead of the
+# standard 5-section risk report.
+REMEDIATION_REQUIRED_SECTIONS = [
+    "## 1. Executive Summary",
+    "## 2. Prioritized Action List",
+    "## 3. Compliance Cross-Check",
+    "## 4. Verification Plan",
 ]
 
 # Higher = more severe. Used to detect over/under-stated risk posture.
@@ -78,7 +89,42 @@ SCENARIOS = [
     },
 ]
 
+# Day 17 remediation scenarios reuse the same input logs but validate the
+# 4-section plan output (no severity axis; ground truth is "a plan exists").
+REMEDIATION_SCENARIOS = [
+    {
+        "name": "benign",
+        "json": "day16_scenario_benign.json",
+        "md": "day17_analysis_benign_remediation.md",
+        "note": "Routine logons - remediation must NOT invent fixes for an attack",
+    },
+    {
+        "name": "bruteforce",
+        "json": "day16_scenario_bruteforce.json",
+        "md": "day17_analysis_bruteforce_remediation.md",
+        "note": "RDP brute force - remediation should lock the source IP + enforce MFA",
+    },
+    {
+        "name": "incident",
+        "json": "day15_sample_events.json",
+        "md": "day17_analysis_incident_remediation.md",
+        "note": "Audit-log clear + backdoor account - remediation should disable the account",
+    },
+]
+
 CURRENT_YEAR = 2026
+
+# Common TCP/UDP port numbers that are NOT Windows Security Event IDs.
+# The no-hallucination guard flags any standalone 4-digit number it cannot place,
+# so a model legitimately citing the RDP port (3389) in remediation advice would
+# otherwise be a false positive. Ports must not be mistaken for fabricated event
+# IDs; none of the ports below coincide with a real Security logon/audit event ID.
+PORT_NUMBERS = frozenset({
+    21, 22, 23, 25, 53, 80, 110, 111, 123, 135, 137, 138, 139, 143, 389,
+    443, 445, 465, 587, 593, 636, 993, 995, 1433, 1434, 1521, 2049, 2375,
+    2376, 3000, 3306, 3389, 5000, 5432, 5601, 6379, 8080, 8443, 9000, 9092,
+    9200, 9300, 11211, 15672, 27017, 50070,
+})
 def missing_sections(text: str):
     """Return the required section headers absent from the analysis."""
     return [h for h in REQUIRED_SECTIONS if h not in text]
@@ -104,7 +150,7 @@ def hallucinated_event_ids(text: str, known_event_ids):
     for line in body.splitlines():
         for n in re.findall(r"\b\d{4}\b", line):
             num = int(n)
-            if num in known or num == CURRENT_YEAR:
+            if num in known or num == CURRENT_YEAR or num in PORT_NUMBERS:
                 continue
             if re.search(
                 rf"\b(?:no|not|without|absence)\s+[:(\w\s,.-]*?\b{n}\b",
@@ -138,15 +184,18 @@ def max_severity_in(text: str):
 
 def findings_count(text: str) -> int:
     """Number of structured findings the model produced ('Event #N' / 'Event N')."""
-    return len(re.findall(r"Event\s*#?\s*\d+", text))
+    return len(re.findall(r"(?:Event|Finding)\s*#?\s*\d+", text))
 
 
-def check_analysis(text: str, known_event_ids, expected_max: str):
+def check_analysis(text: str, known_event_ids, expected_max=None, required_sections=None):
     """Run all quality checks. Returns (verdict, detail rows)."""
     rows = []
+    if required_sections is None:
+        required_sections = REQUIRED_SECTIONS
 
-    miss = missing_sections(text)
-    rows.append(("sections 5/5", "PASS" if not miss else "FAIL", "; ".join(miss) or ""))
+    miss = [h for h in required_sections if h not in text]
+    sec_label = "sections %d/%d" % (len(required_sections) - len(miss), len(required_sections))
+    rows.append((sec_label, "PASS" if not miss else "FAIL", "; ".join(miss) or ""))
     sections_ok = not miss
 
     hall = hallucinated_event_ids(text, known_event_ids)
@@ -155,23 +204,20 @@ def check_analysis(text: str, known_event_ids, expected_max: str):
          "invented: %s" % hall if hall else "")
     )
 
-    actual = max_severity_in(text)
-    if actual is None:
-        posture, posture_note = "WARN", "no severity level mentioned"
+    if expected_max is None:
+        posture, posture_note = "INFO", "N/A (remediation mode)"
     else:
-        diff = SEVERITY_LEVELS[actual] - SEVERITY_LEVELS[expected_max]
-        if diff >= 2:
-            posture, posture_note = (
-                "WARN",
-                f"overstated ({actual} vs expected {expected_max})",
-            )
-        elif diff <= -2:
-            posture, posture_note = (
-                "WARN",
-                f"understated ({actual} vs expected {expected_max})",
-            )
+        actual = max_severity_in(text)
+        if actual is None:
+            posture, posture_note = "WARN", "no severity level mentioned"
         else:
-            posture, posture_note = "PASS", f"matches/~expected ({actual})"
+            diff = SEVERITY_LEVELS[actual] - SEVERITY_LEVELS[expected_max]
+            if diff >= 2:
+                posture, posture_note = "WARN", f"overstated ({actual} vs expected {expected_max})"
+            elif diff <= -2:
+                posture, posture_note = "WARN", f"understated ({actual} vs expected {expected_max})"
+            else:
+                posture, posture_note = "PASS", f"matches/~expected ({actual})"
     rows.append(("risk posture", posture, posture_note))
 
     rows.append(("findings", "INFO", f"{findings_count(text)}"))
@@ -209,6 +255,10 @@ def self_test() -> None:
     # ...and a NEGATED mention ("no 4625 events") is a correct absence note.
     assert hallucinated_event_ids("There were (no 4625 events) observed", {4672}) == []
     assert hallucinated_event_ids("4625 events were observed", {4672}) == [4625]
+    # Day 20: common PORT numbers are NOT invented event IDs (3389 = RDP),
+    # but a genuine auxiliary event ID (1102) outside the input is still flagged.
+    assert hallucinated_event_ids("Confirm the firewall allows 3389.", {4625}) == []
+    assert hallucinated_event_ids("Watch for 1102 audit-log-clear events.", {4625}) == [1102]
     # Only Severity: RATINGS count, not generic adjectives.
     assert max_severity_in("Severity: Low\nSeverity: Info") == "low"
     assert max_severity_in("This is critical monitoring advice.") is None
@@ -236,7 +286,7 @@ def self_test() -> None:
     v, rows = check_analysis(full, [4625], "high")
     assert v == "WARN", "posture understatement not detected"
     print("SELF-TEST OK - quality-check helpers behave as expected")
-def run_scenario(scen: dict, provider: LLMProvider, force: bool, suffix: str = "") -> dict:
+def run_scenario(scen: dict, provider: LLMProvider, force: bool, suffix: str = "", mode: PromptMode = PromptMode.STANDARD) -> dict:
     json_path = Path(scen["json"])
     md_path = Path(scen["md"])
     if suffix:
@@ -247,13 +297,19 @@ def run_scenario(scen: dict, provider: LLMProvider, force: bool, suffix: str = "
     if md_path.exists() and not force:
         print(f"[*] {md_path.name} exists - reusing (--force to re-run)")
     else:
+        title = (
+            f"Day 17 Event Log Remediation - {scen['name']}"
+            if mode is PromptMode.REMEDIATION
+            else f"Day 16 Event Log LLM Analysis - {scen['name']}"
+        )
         print(f"[*] Analyzing {scen['name']} ... (may take minutes)")
         t0 = time.time()
         used_model, _ = analyze_event_log_file(
             input_file=scen["json"],
             output_file=md_path,  # keep suffix/serialized outputs apart
-            title=f"Day 16 Event Log LLM Analysis - {scen['name']}",
+            title=title,
             provider=provider,
+            mode=mode,
         )
         print(f"[+] {scen['name']}: {used_model} in {time.time() - t0:.1f}s -> {md_path.name}")
 
@@ -262,7 +318,13 @@ def run_scenario(scen: dict, provider: LLMProvider, force: bool, suffix: str = "
         e["event_id"]
         for e in json.loads(json_path.read_text(encoding="utf-8"))["events"]
     }
-    verdict, rows = check_analysis(text, known_ids, scen["expected_max"])
+    if mode is PromptMode.REMEDIATION:
+        verdict, rows = check_analysis(
+            text, known_ids,
+            expected_max=None, required_sections=REMEDIATION_REQUIRED_SECTIONS,
+        )
+    else:
+        verdict, rows = check_analysis(text, known_ids, scen["expected_max"])
     return {
         "name": scen["name"],
         "md": md_path.name,
@@ -280,6 +342,10 @@ def main() -> None:
     ap.add_argument("--force", action="store_true", help="Re-run saved outputs")
     ap.add_argument("--limit", type=int, default=None, help="Only first N scenarios")
     ap.add_argument("--suffix", default="", help="Suffix for output files, e.g. gemini")
+    ap.add_argument(
+        "--remediation", action="store_true",
+        help="Day 17: run REMEDIATION mode (fix-it plans -> day17_analysis_*_remediation.md)",
+    )
     ap.add_argument("--self-test", action="store_true", help="Offline checker tests")
     args = ap.parse_args()
 
@@ -310,14 +376,17 @@ def main() -> None:
                 "GEMINI_API_KEY not set; use --provider ollama for local testing."
             )
 
+    scenarios = REMEDIATION_SCENARIOS if args.remediation else SCENARIOS
+    mode = PromptMode.REMEDIATION if args.remediation else PromptMode.STANDARD
     print("=" * 76)
-    print("SentinelAI Day 16 - Event Log LLM validation")
+    label = "SentinelAI Day 16/17 - Event Log LLM validation"
+    print(f"{label} [remediation mode]" if args.remediation else label)
     print("=" * 76)
 
     results = []
-    for scen in SCENARIOS[: args.limit]:
+    for scen in scenarios[: args.limit]:
         try:
-            r = run_scenario(scen, provider, args.force, args.suffix)
+            r = run_scenario(scen, provider, args.force, args.suffix, mode)
         except Exception as exc:  # network/API failures must not abort the batch
             print(f"[-] {scen['name']}: FAILED - {exc}")
             r = {
@@ -342,7 +411,7 @@ def main() -> None:
     failed = [r["name"] for r in results if r["verdict"] == "FAIL"]
     if failed:
         raise SystemExit(f"FAILED scenarios: {', '.join(failed)}")
-    print("\nDay 16 validation complete.")
+    print("\nDay 16/17 validation complete.")
 
 
 if __name__ == "__main__":

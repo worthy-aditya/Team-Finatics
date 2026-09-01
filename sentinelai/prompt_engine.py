@@ -370,6 +370,67 @@ Do not fabricate events that are not present in the event log data. Keep it
 concise and actionable.
 """
 
+# Day 17 (Week 3): Remediation variant for Windows Event Log analysis. Mirrors
+# the structure of NMAP_REMEDIATION_PROMPT (Day 11) but is driven by Windows
+# Security event data. Turns a Day 15/16 finding (e.g. 1102 audit-log clear,
+# 4720 backdoor-account creation, a 4625->4624 brute force) into a prioritized,
+# evidence-tied fix-it list that a defender can actually execute.
+EVENT_LOG_REMEDIATION_PROMPT = """
+You are a practical Windows security engineer. Given the Security event log
+data below, produce a defensive, action-oriented remediation plan. Keep it
+strictly evidence-based: derive every recommendation only from the events
+listed, and never invent events or findings that are not present.
+
+IMPORTANT CONTEXT: The data was collected for a learning exercise or an
+authorized assessment of the user's own system/lab. Focus on verification and
+hardening. Do NOT provide step-by-step exploitation instructions, attack
+playbooks, or specific exploit commands. No external URLs.
+
+Below is structured Windows Security Event Log data (JSON):
+
+{event_log_data}
+
+Produce a Markdown remediation plan with these sections, in this order. Tie
+every recommendation to the specific event ID(s) that justify it:
+
+## 1. Executive Summary
+One short paragraph: which host this covers, how many distinct events need
+attention, and the single most important immediate action a defender should take.
+
+## 2. Prioritized Action List
+For EACH security-relevant event ID, produce a remediation card. Rank cards from
+highest to lowest priority (audit-log clearing and new privileged accounts rank
+above a single routine logon):
+- **Finding #N - <description> (Event ID <id>)**
+  - Risk rating: <High|Medium|Low> — and in one sentence why this event matters
+  - Verify now: 1-2 concrete diagnostic steps a defender can run right now
+    (e.g. `Get-WinEvent -Id 1102` to check for further log clears, inspect the
+    account-creation source host, enumerate logons from the suspect IP).
+    Reference the Event ID explicitly so it is tied to the evidence.
+  - Fix: concrete hardening steps (disable the suspect account, force password
+    reset, enable/expand auditing, restrict source IPs, enforce account
+    lockout and MFA). Reference standard guidance (e.g. "CIS Windows Benchmark",
+    "NIST 800-63B") but do not invent URLs.
+  - Reference: the Event ID(s) and source IP / account this card is based on.
+
+## 3. Compliance Cross-Check
+Map each event card to the most relevant framework control where a clear match
+exists (e.g. 1102 audit-log clearing -> auditing/retention controls; 4720
+account creation + 4672 special privileges -> privileged-account management;
+4625 brute force -> account-lockout / MFA). If an event does not clearly map to
+a control, say so rather than forcing a match. One line per card.
+
+## 4. Verification Plan
+A short checklist a defender can use AFTER remediation to confirm the fix
+worked (e.g. re-run `Get-WinEvent -Id 1102` to confirm no further clears,
+confirm `backupadmin` is disabled/removed, watch 192.168.1.54 for new 4625s,
+re-check privileged-group memberships). Do not fabricate checks the data does
+not support.
+
+Do not fabricate findings not present in the event log data. Keep it concise
+and actionable.
+"""
+
 
 def _select_prompt_template(mode: PromptMode) -> str:
     """Return the prompt template string for a given prompt mode."""
@@ -402,31 +463,34 @@ def build_nmap_analysis_prompt(
 def build_event_log_prompt(
     event_log_data: dict, mode: PromptMode = PromptMode.STANDARD
 ) -> str:
-    """Build a Windows Event Log analysis prompt (Day 15).
+    """Build a Windows Event Log analysis prompt (Day 15/17).
 
-    Formats structured Security event log JSON into the 5-section
-    EVENT_LOG_ANALYSIS_PROMPT template. Only the STANDARD variant exists
-    today; BEGINNER/REMEDIATION variants for event logs are planned for a
-    later Week 3 day (remediation prompt layer), so they raise a clear error
-    instead of silently reusing the Nmap templates on event data.
+    Formats structured Security event log JSON into an event-log prompt variant.
+    STANDARD (5-section risk report, Day 15) and REMEDIATION (Day 17
+    prioritized fix-it plan) are supported. BEGINNER raises a clear error
+    instead of silently reusing the Nmap templates on event data (lands later
+    in Week 3).
 
     Args:
         event_log_data: structured event log dict following the contract in
             day15_sample_events.json:
             {"source", "host", "collected_at", "count", "events": [{...}]}.
-        mode: prompt template to use (default STANDARD).
+        mode: prompt template to use (default STANDARD; REMEDIATION available).
     """
-    if mode is not PromptMode.STANDARD:
-        raise ValueError(
-            f"Event Log prompt mode '{mode.value}' is not built yet on Day 15. "
-            "The 'standard' event-log variant is available now; beginner and "
-            "remediation variants arrive later in Week 3."
-        )
-    return EVENT_LOG_ANALYSIS_PROMPT.format(
-        # Compact separators: the JSON payload is reference context, not the
-        # analysis — indenting it costs several hundred tokens of context that
-        # otherwise limit how long the generated analysis can be.
-        event_log_data=json.dumps(event_log_data, separators=(",", ":"))
+    # Compact separators: the JSON payload is reference context, not the
+    # analysis — indenting it costs several hundred tokens of context that
+    # otherwise limit how long the generated analysis can be.
+    compact_json = json.dumps(event_log_data, separators=(",", ":"))
+    if mode is PromptMode.STANDARD:
+        return EVENT_LOG_ANALYSIS_PROMPT.format(event_log_data=compact_json)
+    if mode is PromptMode.REMEDIATION:
+        return EVENT_LOG_REMEDIATION_PROMPT.format(event_log_data=compact_json)
+    # BEGINNER (and any other future mode) -> explicit error, never silently
+    # reuse the standard template on event data. Beginner lands later Week 3.
+    raise ValueError(
+        f"Event Log prompt mode '{mode.value}' is not built yet. "
+        "The 'standard' and 'remediation' event-log variants are available; "
+        "the 'beginner' variant arrives later in Week 3."
     )
 
 
@@ -576,15 +640,17 @@ def analyze_scan_file(
     preferred_model: Optional[str] = None,
     title: str = "Day 10 Nmap LLM Analysis",
     provider: LLMProvider = LLMProvider.GEMINI,
+    mode: PromptMode = PromptMode.STANDARD,
 ) -> Tuple[str, str]:
     """Analyze a scan JSON file with the given provider and save Markdown.
 
     Day 13: routes through the unified analyze_scan_data() so --llm can pick
-    gemini (cloud) or ollama (local) without changing callers.
+    gemini (cloud) or ollama (local) without changing callers. Day 17 threads
+    the chosen mode (STANDARD/BEGINNER/REMEDIATION) through to analyze_scan_data.
     """
     scan_data = load_scan_data(input_file)
     result = analyze_scan_data(
-        scan_data, provider=provider, preferred_model=preferred_model
+        scan_data, provider=provider, preferred_model=preferred_model, mode=mode
     )
 
     if output_file:

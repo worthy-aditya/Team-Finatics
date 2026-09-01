@@ -453,10 +453,30 @@ def test_build_event_log_prompt_includes_event_data():
 
 
 def test_build_event_log_prompt_mode_not_built_yet():
-    """Only STANDARD exists on Day 15; beginner/remediation raise clearly."""
-    for mode in (PromptMode.BEGINNER, PromptMode.REMEDIATION):
-        with pytest.raises(ValueError, match="not built yet"):
-            build_event_log_prompt(SAMPLE_EVENTS, mode=mode)
+    """BEGINNER is not built for event logs yet; only standard + remediation."""
+    with pytest.raises(ValueError, match="not built yet"):
+        build_event_log_prompt(SAMPLE_EVENTS, mode=PromptMode.BEGINNER)
+
+
+EVENT_LOG_REMEDIATION_SECTIONS = [
+    "## 1. Executive Summary",
+    "## 2. Prioritized Action List",
+    "## 3. Compliance Cross-Check",
+    "## 4. Verification Plan",
+]
+
+
+def test_build_event_log_prompt_remediation_sections():
+    """Day 17: the REMEDIATION variant renders its 4-section plan, no nmap bleed."""
+    prompt = build_event_log_prompt(SAMPLE_EVENTS, mode=PromptMode.REMEDIATION)
+    for header in EVENT_LOG_REMEDIATION_SECTIONS:
+        assert header in prompt, f"remediation prompt missing: {header}"
+    # Must NOT reuse the Nmap remediation template or the Standard event sections.
+    assert "## 1. Plain-English Summary" not in prompt
+    assert "## 5. Confidence & Limitations" not in prompt
+    # Event data is embedded in the remediation prompt too.
+    for event in SAMPLE_EVENTS["events"]:
+        assert str(event["event_id"]) in prompt
 
 
 def test_analyze_event_log_data_via_ollama():
@@ -555,6 +575,7 @@ if __name__ == "__main__":
     test_build_event_log_prompt_has_expected_sections()
     test_build_event_log_prompt_includes_event_data()
     test_build_event_log_prompt_mode_not_built_yet()
+    test_build_event_log_prompt_remediation_sections()
     test_analyze_event_log_data_via_ollama()
     test_load_event_log_data_missing_file()
     print("ALL prompt_engine TESTS PASSED (offline, pure functions)")
