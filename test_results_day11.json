@@ -1,0 +1,154 @@
+{
+  "test_suite": "Day 11 - Multi-target Testing",
+  "timestamp": "2026-08-18T12:09:16.563707",
+  "total_tests": 3,
+  "passed": 2,
+  "failed": 1,
+  "results": [
+    {
+      "test_number": 1,
+      "target": "127.0.0.1",
+      "test_name": "Localhost - Standard Scan",
+      "aggressive": false,
+      "timestamp": "2026-08-18T12:07:54.353995",
+      "status": "PASS",
+      "scan_data": {
+        "scan_metadata": {
+          "target": "127.0.0.1",
+          "scan_time": "2026-08-18T12:07:54.339140",
+          "summary": "Scanned 127.0.0.1 | Found 2 open ports on 1 host(s)"
+        },
+        "scan_statistics": {
+          "hosts_up": 1,
+          "total_ports_scanned": 3,
+          "open_ports": 2,
+          "filtered_ports": 1,
+          "closed_ports": 0,
+          "services_detected": 2
+        },
+        "discovered_services": [
+          {
+            "name": "msrpc",
+            "product": "Microsoft Windows RPC",
+            "version": "",
+            "count": 1
+          },
+          {
+            "name": "microsoft-ds",
+            "product": "",
+            "version": "",
+            "count": 1
+          }
+        ],
+        "open_ports_detail": [
+          {
+            "host": "127.0.0.1",
+            "port": 135,
+            "protocol": "tcp",
+            "service_name": "msrpc",
+            "product": "Microsoft Windows RPC",
+            "version": "",
+            "extra_info": ""
+          },
+          {
+            "host": "127.0.0.1",
+            "port": 445,
+            "protocol": "tcp",
+            "service_name": "microsoft-ds",
+            "product": "",
+            "version": "",
+            "extra_info": ""
+          }
+        ],
+        "risk_assessment": {
+          "risk_level": "MEDIUM",
+          "critical_services": [
+            {
+              "host": "127.0.0.1",
+              "port": 445,
+              "service": "microsoft-ds",
+              "product": ""
+            }
+          ],
+          "recommendation": "WARNING: Critical service detected. Review access controls and consider service hardening."
+        }
+      }
+    },
+    {
+      "test_number": 2,
+      "target": "127.0.0.1",
+      "test_name": "Localhost - Aggressive Scan",
+      "aggressive": true,
+      "timestamp": "2026-08-18T12:08:16.542706",
+      "status": "PASS",
+      "scan_data": {
+        "scan_metadata": {
+          "target": "127.0.0.1",
+          "scan_time": "2026-08-18T12:08:16.521672",
+          "summary": "Scanned 127.0.0.1 | Found 2 open ports on 1 host(s)"
+        },
+        "scan_statistics": {
+          "hosts_up": 1,
+          "total_ports_scanned": 3,
+          "open_ports": 2,
+          "filtered_ports": 1,
+          "closed_ports": 0,
+          "services_detected": 2
+        },
+        "discovered_services": [
+          {
+            "name": "msrpc",
+            "product": "Microsoft Windows RPC",
+            "version": "",
+            "count": 1
+          },
+          {
+            "name": "microsoft-ds",
+            "product": "",
+            "version": "",
+            "count": 1
+          }
+        ],
+        "open_ports_detail": [
+          {
+            "host": "127.0.0.1",
+            "port": 135,
+            "protocol": "tcp",
+            "service_name": "msrpc",
+            "product": "Microsoft Windows RPC",
+            "version": "",
+            "extra_info": ""
+          },
+          {
+            "host": "127.0.0.1",
+            "port": 445,
+            "protocol": "tcp",
+            "service_name": "microsoft-ds",
+            "product": "",
+            "version": "",
+            "extra_info": ""
+          }
+        ],
+        "risk_assessment": {
+          "risk_level": "MEDIUM",
+          "critical_services": [
+            {
+              "host": "127.0.0.1",
+              "port": 445,
+              "service": "microsoft-ds",
+              "product": ""
+            }
+          ],
+          "recommendation": "WARNING: Critical service detected. Review access controls and consider service hardening."
+        }
+      }
+    },
+    {
+      "test_number": 3,
+      "target": "8.8.8.8",
+      "test_name": "Public DNS Server (8.8.8.8)",
+      "status": "FAIL",
+      "error": "Scan timeout"
+    }
+  ]
+}

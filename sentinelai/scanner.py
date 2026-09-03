@@ -4,14 +4,8 @@ Nmap scanner wrapper for SentinelAI
 
 import nmap
 import json
-import re
-import logging
 from typing import Dict, List, Optional
 from datetime import datetime
-
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
 
 
 class Scanner:
@@ -20,20 +14,6 @@ class Scanner:
     def __init__(self, target):
         self.target = target
         self.results = None
-    
-    @staticmethod
-    def validate_target(target: str) -> bool:
-        """Validate target format (IP, hostname, or domain)"""
-        # IP address validation (IPv4)
-        ipv4_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
-        # Hostname/domain validation
-        domain_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$'
-        # localhost
-        localhost_pattern = r'^(localhost|127\.0\.0\.1)$'
-        
-        return bool(re.match(ipv4_pattern, target) or 
-                   re.match(domain_pattern, target) or 
-                   re.match(localhost_pattern, target))
     
     def scan(self):
         """Execute scan"""
@@ -49,15 +29,15 @@ class NmapScanner(Scanner):
     
     def __init__(self, target):
         super().__init__(target)
-        
-        # Validate target format
-        if not self.validate_target(target):
-            logger.warning(f"Target '{target}' may not be valid. Proceeding anyway...")
-        
         self.nm = nmap.PortScanner()
         self.raw_output = None
         self.parsed_results = None
-        self.scan_errors = []
+        self.scan_timeout = 60  # Default timeout in seconds
+        self.last_error = None
+    
+    def set_timeout(self, timeout: int):
+        """Set scan timeout in seconds"""
+        self.scan_timeout = timeout
     
     def scan(self, arguments="-sV -p 1-1000"):
         """
@@ -71,165 +51,115 @@ class NmapScanner(Scanner):
             bool: True if scan successful, False otherwise
         """
         try:
-            logger.info(f"[*] Scanning target: {self.target}")
-            logger.info(f"[*] Using arguments: {arguments}")
             print(f"[*] Scanning target: {self.target}")
             print(f"[*] Using arguments: {arguments}")
+            print(f"[*] Timeout: {self.scan_timeout} seconds")
             
-            self.nm.scan(self.target, arguments=arguments)
-            
-            # Check if scan found any hosts
-            if not self.nm.all_hosts():
-                error_msg = f"[!] No hosts found for target: {self.target}"
-                logger.warning(error_msg)
-                print(error_msg)
-                self.scan_errors.append("No hosts found")
+            # Validate target format
+            if not self._validate_target(self.target):
+                self.last_error = f"Invalid target format: {self.target}"
+                print(f"[!] {self.last_error}")
                 return False
             
+            self.nm.scan(self.target, arguments=arguments, timeout=self.scan_timeout)
             self.raw_output = self.nm.csv()
             self.parse_results()
-            logger.info("[+] Scan completed successfully")
             return True
             
+        except nmap.PortScannerTimeoutExpired:
+            self.last_error = f"Scan timeout exceeded ({self.scan_timeout}s) for target {self.target}"
+            print(f"[!] {self.last_error}")
+            print("[*] Tip: Use --timeout flag to increase scan duration for external targets")
+            return False
+        except nmap.PortScannerHostDown:
+            self.last_error = f"Target host {self.target} is down or unreachable"
+            print(f"[!] {self.last_error}")
+            print("[*] Tip: Verify target is online and reachable from your network")
+            return False
         except nmap.PortScannerError as e:
-            error_msg = f"[!] Nmap error: {str(e)}"
-            logger.error(error_msg)
-            print(error_msg)
-            self.scan_errors.append(str(e))
+            self.last_error = f"Nmap error: {e}"
+            print(f"[!] {self.last_error}")
+            if "Permission denied" in str(e):
+                print("[*] Tip: Some Nmap options require elevated privileges")
             return False
         except Exception as e:
-            error_msg = f"[!] Unexpected error: {str(e)}"
-            logger.error(error_msg)
-            print(error_msg)
-            self.scan_errors.append(str(e))
+            self.last_error = f"Unexpected error: {e}"
+            print(f"[!] {self.last_error}")
             return False
+    
+    def _validate_target(self, target: str) -> bool:
+        """
+        Validate target format
+        
+        Args:
+            target (str): Target IP or hostname
+        
+        Returns:
+            bool: True if target format is valid
+        """
+        import re
+        
+        # Valid formats: IP address, hostname, CIDR notation
+        ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+        hostname_pattern = r'^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$'
+        cidr_pattern = r'^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$'
+        localhost_pattern = r'^localhost$'
+        
+        patterns = [ip_pattern, hostname_pattern, cidr_pattern, localhost_pattern]
+        
+        for pattern in patterns:
+            if re.match(pattern, target):
+                return True
+        
+        return False
     
     def parse_results(self) -> Dict:
         """
-        Parse Nmap results into comprehensive structured format
-        LLM-ready output with detailed host, ports, and services information
+        Parse Nmap results into structured format
         
         Returns:
-            dict: Structured scan results with metadata and detailed port/service info
+            dict: Structured scan results with hosts, ports, and services
         """
-        scan_start_time = datetime.now().isoformat()
-        
         self.parsed_results = {
-            "metadata": {
-                "target": self.target,
-                "scan_timestamp": scan_start_time,
-                "scan_type": "nmap_security_scan"
-            },
-            "summary": {
-                "total_hosts_scanned": 0,
-                "total_hosts_up": 0,
-                "total_ports_scanned": 0,
-                "total_open_ports": 0,
-                "total_closed_ports": 0,
-                "total_filtered_ports": 0
-            },
+            "target": self.target,
+            "scan_status": {},
             "hosts": []
         }
         
         try:
-            hosts_list = self.nm.all_hosts()
-            self.parsed_results["summary"]["total_hosts_scanned"] = len(hosts_list)
+            # Handle case where no hosts were found
+            if not self.nm.all_hosts():
+                self.last_error = "No hosts found or target is unreachable"
+                print("[!] No hosts were discovered during scan")
+                return self.parsed_results
             
-            for host in hosts_list:
-                host_state = self.nm[host].state()
-                if host_state == "up":
-                    self.parsed_results["summary"]["total_hosts_up"] += 1
-                
+            for host in self.nm.all_hosts():
                 host_info = {
-                    "address": host,
-                    "status": host_state,
-                    "hostnames": [],
-                    "ports": [],
-                    "services": {},
-                    "protocol_summary": {}
+                    "ip": host,
+                    "status": self.nm[host].state(),
+                    "protocols": {}
                 }
                 
-                # Collect hostnames if available
-                try:
-                    if self.nm[host].hostnames():
-                        host_info["hostnames"] = [h for h in self.nm[host].hostnames() if h]
-                except:
-                    pass
-                
-                # Process all protocols (tcp, udp, etc.)
                 for proto in self.nm[host].all_protocols():
-                    proto_ports = []
-                    open_count = 0
-                    closed_count = 0
-                    filtered_count = 0
+                    host_info["protocols"][proto] = []
                     
                     ports = self.nm[host][proto].keys()
                     for port in sorted(ports):
-                        port_data = self.nm[host][proto][port]
-                        state = port_data["state"]
-                        
-                        # Update port state counters
-                        if state == "open":
-                            open_count += 1
-                            self.parsed_results["summary"]["total_open_ports"] += 1
-                        elif state == "closed":
-                            closed_count += 1
-                            self.parsed_results["summary"]["total_closed_ports"] += 1
-                        elif state == "filtered":
-                            filtered_count += 1
-                            self.parsed_results["summary"]["total_filtered_ports"] += 1
-                        
-                        self.parsed_results["summary"]["total_ports_scanned"] += 1
-                        
                         port_info = {
-                            "port": int(port),
-                            "protocol": proto,
-                            "state": state,
-                            "service": {
-                                "name": port_data.get("name", "unknown"),
-                                "product": port_data.get("product", ""),
-                                "version": port_data.get("version", ""),
-                                "extrainfo": port_data.get("extrainfo", "")
-                            }
+                            "port": port,
+                            "state": self.nm[host][proto][port]["state"],
+                            "name": self.nm[host][proto][port].get("name", ""),
+                            "product": self.nm[host][proto][port].get("product", ""),
+                            "version": self.nm[host][proto][port].get("version", ""),
+                            "extrainfo": self.nm[host][proto][port].get("extrainfo", "")
                         }
-                        
-                        # Build full service string for easy consumption
-                        service_str = port_data.get("name", "unknown")
-                        if port_data.get("product"):
-                            service_str += f" ({port_data['product']}"
-                            if port_data.get("version"):
-                                service_str += f" {port_data['version']}"
-                            service_str += ")"
-                        if port_data.get("extrainfo"):
-                            service_str += f" - {port_data['extrainfo']}"
-                        
-                        port_info["service_string"] = service_str
-                        
-                        # Add to ports list
-                        host_info["ports"].append(port_info)
-                        
-                        # Build services dict organized by port
-                        host_info["services"][f"{port}/{proto}"] = {
-                            "state": state,
-                            "name": port_data.get("name", "unknown"),
-                            "full_info": service_str
-                        }
-                        
-                        proto_ports.append(port_info)
-                    
-                    # Protocol summary
-                    host_info["protocol_summary"][proto] = {
-                        "open": open_count,
-                        "closed": closed_count,
-                        "filtered": filtered_count,
-                        "total_scanned": len(ports)
-                    }
+                        host_info["protocols"][proto].append(port_info)
                 
                 self.parsed_results["hosts"].append(host_info)
                 
         except Exception as e:
-            print(f"[!] Error parsing results: {e}")
-            logger.error(f"Parse error: {str(e)}")
+            self.last_error = f"Error parsing results: {e}"
+            print(f"[!] {self.last_error}")
         
         return self.parsed_results
     
@@ -238,75 +168,55 @@ class NmapScanner(Scanner):
         return self.parsed_results
     
     def get_open_ports(self) -> List[Dict]:
-        """Get list of all open ports found in a structured format"""
+        """Get list of all open ports found"""
         open_ports = []
         if not self.parsed_results:
             return open_ports
             
         for host in self.parsed_results.get("hosts", []):
-            for port_info in host.get("ports", []):
-                if port_info["state"] == "open":
-                    open_ports.append({
-                        "host": host["address"],
-                        "port": port_info["port"],
-                        "protocol": port_info["protocol"],
-                        "service": port_info["service"]["name"],
-                        "product": port_info["service"]["product"],
-                        "version": port_info["service"]["version"],
-                        "service_string": port_info.get("service_string", "")
-                    })
+            for proto, ports in host.get("protocols", {}).items():
+                for port in ports:
+                    if port["state"] == "open":
+                        open_ports.append({
+                            "host": host["ip"],
+                            "port": port["port"],
+                            "protocol": proto,
+                            "service": port["name"],
+                            "product": port["product"],
+                            "version": port["version"]
+                        })
         return open_ports
     
     def get_summary(self) -> str:
-        """Get human-readable summary of scan with detailed statistics"""
+        """Get human-readable summary of scan"""
         if not self.parsed_results:
-            return "[!] No scan results available. Scan may have failed or no hosts were found."
-        
-        if not self.parsed_results.get("hosts"):
-            return f"[!] No hosts found for target: {self.target}"
+            return "No scan results available"
         
         summary = []
-        
-        # Add header with metadata
-        summary.append(f"Scan Target: {self.target}")
-        summary.append(f"Scan Time: {self.parsed_results['metadata']['scan_timestamp']}")
-        summary.append("")
-        
-        # Add scan summary statistics
-        stats = self.parsed_results["summary"]
-        summary.append("SCAN STATISTICS")
-        summary.append("=" * 60)
-        summary.append(f"Total Hosts Scanned: {stats['total_hosts_scanned']}")
-        summary.append(f"Total Hosts Up: {stats['total_hosts_up']}")
-        summary.append(f"Total Ports Scanned: {stats['total_ports_scanned']}")
-        summary.append(f"Open Ports: {stats['total_open_ports']} | Closed: {stats['total_closed_ports']} | Filtered: {stats['total_filtered_ports']}")
-        summary.append("")
-        
-        # Add host details
-        summary.append("HOST DETAILS")
-        summary.append("=" * 60)
+        summary.append(f"Target: {self.target}")
         
         for host in self.parsed_results.get("hosts", []):
-            summary.append(f"\nHost: {host['address']} ({host['status']})")
+            summary.append(f"Host: {host['ip']} ({host['status']})")
             
-            if host.get("hostnames"):
-                summary.append(f"  Hostnames: {', '.join(host['hostnames'])}")
-            
-            # Protocol summary
-            for proto, proto_stats in host.get("protocol_summary", {}).items():
-                summary.append(f"\n  {proto.upper()} Protocol:")
-                summary.append(f"    Open: {proto_stats['open']} | Closed: {proto_stats['closed']} | Filtered: {proto_stats['filtered']}")
-            
-            # List open ports with service details
-            open_ports = [p for p in host.get("ports", []) if p["state"] == "open"]
-            if open_ports:
-                summary.append("  Open Ports:")
-                for port in open_ports:
-                    summary.append(f"    {port['port']}/{port['protocol']}: {port['service_string']}")
-            else:
-                summary.append("  No open ports found")
+            for proto, ports in host.get("protocols", {}).items():
+                open_count = sum(1 for p in ports if p["state"] == "open")
+                filtered_count = sum(1 for p in ports if p["state"] == "filtered")
+                closed_count = sum(1 for p in ports if p["state"] == "closed")
+                
+                summary.append(f"  {proto.upper()}: {open_count} open, {filtered_count} filtered, {closed_count} closed")
+                
+                # List open ports
+                for port in ports:
+                    if port["state"] == "open":
+                        service_info = f"{port['name']}"
+                        if port['product']:
+                            service_info += f" ({port['product']}"
+                            if port['version']:
+                                service_info += f" {port['version']}"
+                            service_info += ")"
+                        summary.append(f"    Port {port['port']}/{proto}: {port['state'].upper()} - {service_info}")
         
-        return "\n".join(summary) if summary else "[!] No scan information available"
+        return "\n".join(summary)
     
     def export_json(self, filepath: str) -> bool:
         """Export results to JSON file"""
@@ -314,19 +224,215 @@ class NmapScanner(Scanner):
             with open(filepath, 'w') as f:
                 json.dump(self.parsed_results, f, indent=2)
             print(f"[+] Results exported to: {filepath}")
-            logger.info(f"Results exported to {filepath}")
             return True
         except Exception as e:
             print(f"[!] Error exporting to JSON: {e}")
-            logger.error(f"JSON export failed: {str(e)}")
             return False
     
-    def to_json_string(self) -> str:
-        """Get results as JSON string"""
+    def get_statistics(self) -> Dict:
+        """Get scan statistics and summary metrics"""
         if not self.parsed_results:
-            return json.dumps({"error": "No scan results available"}, indent=2)
-        return json.dumps(self.parsed_results, indent=2)
+            return {}
+        
+        stats = {
+            "scan_timestamp": datetime.now().isoformat(),
+            "target": self.target,
+            "total_hosts": len(self.parsed_results.get("hosts", [])),
+            "hosts_up": 0,
+            "total_ports_scanned": 0,
+            "open_ports_found": 0,
+            "filtered_ports": 0,
+            "closed_ports": 0,
+            "services_detected": 0,
+            "critical_services": []
+        }
+        
+        critical_keywords = ["microsoft-ds", "ssh", "telnet", "ftp", "http", "smtp", "rdp"]
+        
+        for host in self.parsed_results.get("hosts", []):
+            if host["status"] == "up":
+                stats["hosts_up"] += 1
+            
+            for proto, ports in host.get("protocols", {}).items():
+                stats["total_ports_scanned"] += len(ports)
+                
+                for port in ports:
+                    if port["state"] == "open":
+                        stats["open_ports_found"] += 1
+                        if port.get("name"):
+                            stats["services_detected"] += 1
+                            # Check for critical services
+                            service_name = port.get("name", "").lower()
+                            if any(kw in service_name for kw in critical_keywords):
+                                stats["critical_services"].append({
+                                    "host": host["ip"],
+                                    "port": port["port"],
+                                    "service": port.get("name", "unknown"),
+                                    "product": port.get("product", "")
+                                })
+                    elif port["state"] == "filtered":
+                        stats["filtered_ports"] += 1
+                    elif port["state"] == "closed":
+                        stats["closed_ports"] += 1
+        
+        return stats
     
-    def get_json_dict(self) -> Dict:
-        """Get results as dictionary for programmatic use"""
-        return self.parsed_results if self.parsed_results else {}
+    def get_llm_ready_format(self) -> Dict:
+        """
+        Get structured output optimized for LLM analysis
+        
+        Returns:
+            dict: Formatted data ready for passing to LLM prompt module
+        """
+        if not self.parsed_results:
+            return {"error": "No scan results available"}
+        
+        # Check if any hosts were found
+        hosts = self.parsed_results.get("hosts", [])
+        if not hosts:
+            return {
+                "scan_metadata": {
+                    "target": self.target,
+                    "scan_time": datetime.now().isoformat(),
+                    "summary": f"Target {self.target} is unreachable or offline"
+                },
+                "scan_statistics": {
+                    "hosts_up": 0,
+                    "total_ports_scanned": 0,
+                    "open_ports": 0,
+                    "filtered_ports": 0,
+                    "closed_ports": 0,
+                    "services_detected": 0
+                },
+                "error": "No hosts found - target may be offline or unreachable",
+                "discovered_services": [],
+                "open_ports_detail": [],
+                "risk_assessment": {
+                    "risk_level": "UNKNOWN",
+                    "critical_services": [],
+                    "recommendation": "Unable to assess security posture. Verify target is online and reachable."
+                }
+            }
+        
+        stats = self.get_statistics()
+        
+        # Build LLM-friendly format
+        llm_format = {
+            "scan_metadata": {
+                "target": self.target,
+                "scan_time": stats.get("scan_timestamp"),
+                "summary": f"Scanned {stats.get('target')} | Found {stats.get('open_ports_found')} open ports on {stats.get('hosts_up')} host(s)"
+            },
+            "scan_statistics": {
+                "hosts_up": stats.get("hosts_up"),
+                "total_ports_scanned": stats.get("total_ports_scanned"),
+                "open_ports": stats.get("open_ports_found"),
+                "filtered_ports": stats.get("filtered_ports"),
+                "closed_ports": stats.get("closed_ports"),
+                "services_detected": stats.get("services_detected")
+            },
+            "discovered_services": [],
+            "open_ports_detail": [],
+            "risk_assessment": {
+                "risk_level": self._calculate_risk_level(stats),
+                "critical_services": stats.get("critical_services", []),
+                "recommendation": self._get_recommendation(stats)
+            }
+        }
+        
+        # Extract discovered services and open ports
+        for host in self.parsed_results.get("hosts", []):
+            for proto, ports in host.get("protocols", {}).items():
+                for port in ports:
+                    if port["state"] == "open":
+                        service_entry = {
+                            "host": host["ip"],
+                            "port": port["port"],
+                            "protocol": proto,
+                            "service_name": port.get("name", "unknown"),
+                            "product": port.get("product", ""),
+                            "version": port.get("version", ""),
+                            "extra_info": port.get("extrainfo", "")
+                        }
+                        llm_format["open_ports_detail"].append(service_entry)
+                        
+                        # Add to discovered services if not already there
+                        if port.get("name"):
+                            service_dict = {
+                                "name": port.get("name"),
+                                "product": port.get("product", ""),
+                                "version": port.get("version", ""),
+                                "count": 1
+                            }
+                            if service_dict not in llm_format["discovered_services"]:
+                                llm_format["discovered_services"].append(service_dict)
+        
+        return llm_format
+    
+    def _calculate_risk_level(self, stats: Dict) -> str:
+        """Calculate risk level based on scan statistics"""
+        critical_count = len(stats.get("critical_services", []))
+        open_ports = stats.get("open_ports_found", 0)
+        
+        if critical_count >= 3 or open_ports >= 10:
+            return "CRITICAL"
+        elif critical_count >= 2 or open_ports >= 5:
+            return "HIGH"
+        elif critical_count >= 1 or open_ports >= 1:
+            return "MEDIUM"
+        else:
+            return "LOW"
+    
+    def _get_recommendation(self, stats: Dict) -> str:
+        """Get security recommendation based on findings"""
+        critical_count = len(stats.get("critical_services", []))
+        open_ports = stats.get("open_ports_found", 0)
+        
+        if critical_count >= 2:
+            return "URGENT: Multiple critical services exposed. Implement firewall rules immediately."
+        elif critical_count >= 1:
+            return "WARNING: Critical service detected. Review access controls and consider service hardening."
+        elif open_ports >= 5:
+            return "CAUTION: Multiple open ports found. Verify all are necessary and properly secured."
+        elif open_ports >= 1:
+            return "INFO: Open port(s) detected. Ensure services are up-to-date and properly configured."
+        else:
+            return "GOOD: No open ports detected on scanned range."
+    
+    def validate_structure(self) -> bool:
+        """
+        Validate that parsed results have correct structure
+        
+        Returns:
+            bool: True if structure is valid, False otherwise
+        """
+        if not self.parsed_results:
+            print("[!] No parsed results available")
+            return False
+        
+        # Check required top-level keys
+        required_keys = ["target", "scan_status", "hosts"]
+        for key in required_keys:
+            if key not in self.parsed_results:
+                print(f"[!] Missing required key: {key}")
+                return False
+        
+        # Check hosts structure
+        hosts = self.parsed_results.get("hosts", [])
+        if not isinstance(hosts, list):
+            print("[!] 'hosts' must be a list")
+            return False
+        
+        for host in hosts:
+            if not isinstance(host, dict):
+                print("[!] Each host must be a dictionary")
+                return False
+            
+            required_host_keys = ["ip", "status", "protocols"]
+            for key in required_host_keys:
+                if key not in host:
+                    print(f"[!] Host missing required key: {key}")
+                    return False
+        
+        print("[+] Structure validation passed")
+        return True

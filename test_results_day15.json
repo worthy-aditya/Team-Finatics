@@ -1,0 +1,200 @@
+{
+  "test_date": "2026-08-18 13:08:28",
+  "events_read": 100,
+  "sample_events": [
+    {
+      "log": "Application",
+      "event_id": 16384,
+      "event_type": 4,
+      "source": "Software Protection Platform Service",
+      "computer": "LAPTOP-HOO6NDCL",
+      "timestamp": "2026-08-18 13:08:28",
+      "message": "2126-07-25T07:38:28Z | RulesEngine",
+      "category": 0,
+      "record_number": 32852,
+      "data": ""
+    },
+    {
+      "log": "Application",
+      "event_id": 16394,
+      "event_type": 4,
+      "source": "Software Protection Platform Service",
+      "computer": "LAPTOP-HOO6NDCL",
+      "timestamp": "2026-08-18 13:07:58",
+      "message": "",
+      "category": 0,
+      "record_number": 32851,
+      "data": ""
+    },
+    {
+      "log": "Application",
+      "event_id": 256,
+      "event_type": 4,
+      "source": "Chrome",
+      "computer": "LAPTOP-HOO6NDCL",
+      "timestamp": "2026-08-18 13:07:18",
+      "message": "[15976:2444:0818/130718.066:INFO:chrome\\browser\\extensions\\extension_garbage_collector.cc:188] Garbage collection for extensions on file thread is complete.",
+      "category": 1,
+      "record_number": 32850,
+      "data": ""
+    },
+    {
+      "log": "Application",
+      "event_id": 8224,
+      "event_type": 4,
+      "source": "VSS",
+      "computer": "LAPTOP-HOO6NDCL",
+      "timestamp": "2026-08-18 12:57:28",
+      "message": "",
+      "category": 0,
+      "record_number": 32849,
+      "data": "b'- Code:  CORSVCC00000772- Call:  CORSVCC00000754- PID:  00002320- TID:  00008436- CMD:  C:\\\\WINDOWS\\\\system32\\\\vssvc.exe   - User: Name: NT AUTHORITY\\\\SYSTEM, SID:S-1-5-18 '"
+    },
+    {
+      "log": "Application",
+      "event_id": 8231,
+      "event_type": 4,
+      "source": "VSS",
+      "computer": "LAPTOP-HOO6NDCL",
+      "timestamp": "2026-08-18 12:54:26",
+      "message": "{a7ab2075-cc01-4e84-8dc9-0fceccdfbf5a} | taskhostw.exe | taskhostw.exe",
+      "category": 0,
+      "record_number": 32848,
+      "data": ""
+    },
+    {
+      "log": "Application",
+      "event_id": 0,
+      "event_type": 4,
+      "source": "edgeupdate",
+      "computer": "LAPTOP-HOO6NDCL",
+      "timestamp": "2026-08-18 12:49:16",
+      "message": "Service stopped",
+      "category": 0,
+      "record_number": 32847,
+      "data": ""
+    },
+    {
+      "log": "Application",
+      "event_id": 2562,
+      "event_type": 4,
+      "source": "Microsoft-Windows-AppXDeploymentServer/Operational",
+      "computer": "LAPTOP-HOO6NDCL",
+      "timestamp": "2026-08-18 12:48:57",
+      "message": "MSIXDeployment | windows.applicationData | DeleteMachineFolder",
+      "category": 0,
+      "record_number": 32846,
+      "data": ""
+    },
+    {
+      "log": "Application",
+      "event_id": 16384,
+      "event_type": 4,
+      "source": "Software Protection Platform Service",
+      "computer": "LAPTOP-HOO6NDCL",
+      "timestamp": "2026-08-18 12:32:40",
+      "message": "2126-07-25T07:02:40Z | RulesEngine",
+      "category": 0,
+      "record_number": 32845,
+      "data": ""
+    },
+    {
+      "log": "Application",
+      "event_id": 16394,
+      "event_type": 4,
+      "source": "Software Protection Platform Service",
+      "computer": "LAPTOP-HOO6NDCL",
+      "timestamp": "2026-08-18 12:32:10",
+      "message": "",
+      "category": 0,
+      "record_number": 32844,
+      "data": ""
+    },
+    {
+      "log": "Application",
+      "event_id": 16384,
+      "event_type": 4,
+      "source": "Software Protection Platform Service",
+      "computer": "LAPTOP-HOO6NDCL",
+      "timestamp": "2026-08-18 12:26:13",
+      "message": "2126-07-25T06:56:13Z | RulesEngine",
+      "category": 0,
+      "record_number": 32843,
+      "data": ""
+    }
+  ],
+  "statistics": {
+    "total_events": 100,
+    "unique_event_ids": 32,
+    "event_id_counts": {
+      "16384": 13,
+      "16394": 12,
+      "256": 3,
+      "8224": 1,
+      "8231": 1,
+      "0": 22,
+      "2562": 3,
+      "15": 2,
+      "259": 2,
+      "1001": 10,
+      "903": 1,
+      "1": 3,
+      "902": 1,
+      "1003": 2,
+      "1066": 1,
+      "900": 1,
+      "86": 1,
+      "10001": 2,
+      "1042": 2,
+      "1035": 1,
+      "11728": 1,
+      "10000": 2,
+      "6000": 1,
+      "6003": 1,
+      "1040": 2,
+      "63": 3,
+      "2": 1,
+      "5617": 1,
+      "5615": 1,
+      "1531": 1,
+      "1033": 1,
+      "11707": 1
+    },
+    "event_type_counts": {
+      "4": 92,
+      "1": 3,
+      "0": 2,
+      "2": 3
+    },
+    "top_events": [
+      [
+        0,
+        22
+      ],
+      [
+        16384,
+        13
+      ],
+      [
+        16394,
+        12
+      ],
+      [
+        1001,
+        10
+      ],
+      [
+        256,
+        3
+      ]
+    ]
+  },
+  "analysis": {
+    "timestamp": "2026-08-18T13:28:57.233528",
+    "events_analyzed": 100,
+    "critical_events": [],
+    "suspicious_patterns": [],
+    "threat_summary": "\u2713 No immediate threats detected",
+    "recommendations": []
+  }
+}

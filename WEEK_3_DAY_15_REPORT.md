@@ -1,152 +1,258 @@
-# Week 3 — Day 15: Windows Event Log Prompt Template
-**Date:** 2026-08-28
-**Developer:** Aditya Gupta (Project Lead & LLM)
-**Sprint:** SentinelAI 30-Day Sprint | Week 3, Day 15
-**Status:** ✅ **COMPLETE**
+# Week 3, Day 15: PyWin32 Setup & Event Log Reader
+**Date:** 2026-08-18  
+**Status:** ✅ COMPLETE
 
 ---
 
-## Day 15 Objective
-> Design the prompt for Windows Event Log analysis
-> **Deliverable:** A reusable `EVENT_LOG_ANALYSIS_PROMPT` template plus the
-> full provider-agnostic flow (`load → build → analyze → Markdown`), mirroring
-> the proven Week 2 Nmap pipeline so Week 3 event data slots in unchanged.
+## OBJECTIVE
+Set up PyWin32 library and create EventLogReader class to read Windows Security/Application event logs.
+
+**Success Criteria:**
+- ✅ PyWin32 installed and verified
+- ✅ EventLogReader class created and functional
+- ✅ Can read 100+ events from Windows logs
+- ✅ Events properly parsed to structured format
+- ✅ Statistics generated successfully
 
 ---
 
-## What Was Built
+## WORK COMPLETED
 
-### 1. Event Log Prompt Template (`sentinelai/prompt_engine.py`)
-`EVENT_LOG_ANALYSIS_PROMPT` — a strict 5-section Markdown template driven by
-Windows **Security** event data, with explicit anti-hallucination and
-correlation rules:
-
-| § | Section | Forces the model to produce |
-|---|---------|------------------------------|
-| 1 | Plain-English Summary | host, time window, event count, event IDs, overall picture |
-| 2 | Security Events (ranked by risk) | `Event #N`, `Severity (X/10)`, exact evidence, count-aware ranking |
-| 3 | What These Events Suggest | defensive-only inference + event correlation (e.g. 4625→4624, 4720+4672) + prove/not-prove |
-| 4 | Recommended Next Steps | Immediate (investigation) + Medium-term (hardening), each tied to events |
-| 5 | Confidence & Limitations | basis, degradation factors, what's not covered |
-
-Event IDs the template is built to interpret: 1102 (audit log cleared), 4624
-(logon), 4625 (failed logon), 4672 (special privileges), 4720 (user created),
-4728 (member added to security group) — matching Affan's Day 16 filter target.
-
-### 2. Event Log Flow (mirrors the Nmap pipeline)
-- `load_event_log_data(path)` — friendly loader (`event_logs.json` default)
-- `build_event_log_prompt(data, mode=STANDARD)` — formats event JSON into the
-  template. BEGINNER/REMEDIATION raise a clear *"not built yet on Day 15"*
-  error (they land Day 17/19), never silently reuse the Nmap templates.
-- `analyze_event_log_data(...)` — provider-agnostic (gemini + ollama), same
-  signature/timeout semantics as `analyze_scan_data`.
-- `analyze_event_log_file(...)` — file → Markdown with `Provider|Model` header.
-
-### 3. CLI `--kind scan|events` (both entry points)
-`sentinelai/cli.py` **and** `commands/analyze.py` updated identically so the
-existing `analyze` command serves either data kind:
-```
-python sentinelai.py analyze -i day15_sample_events.json --kind events -o day15_analysis_events.md --llm ollama
-python sentinelai.py analyze --kind scan -i scan_results.json --llm gemini      # unchanged default
+### 1. PyWin32 Installation ✅
+```bash
+.\venv\Scripts\pip install pywin32
+# Result: Successfully installed pywin32-312
 ```
 
-### 4. Sample Data Contract (`day15_sample_events.json`)
-The exact JSON schema Affan's `--logs` parser must emit:
-`{ "source", "host", "collected_at", "window_start", "window_end", "count",
-"events": [{event_id, timestamp, level, channel, account, domain, logon_type,
-logon_type_name, source_ip, source_host, message, count}] }`. Ships a realistic
-Security-log sample (4624/4625×14/4672/4720/4728/1102) so the template is
-testable **now**, before the real parser lands.
+**Status:** PyWin32 is available and win32evtlog module is importable.
 
-### 5. Tests (`tests/test_prompt_engine.py`)
-New offline (pure-function, no network) tests:
-- event-log prompt contains all 5 required section headers
-- event data (IDs, accounts, host) embedded in the prompt
-- BEGINNER/REMEDIATION raise "not built yet"
-- `analyze_event_log_data(provider=OLLAMA)` routes through `/api/generate` and
-  uses the event-log (not Nmap) template
-- missing event-log file → friendly `FileNotFoundError`
+### 2. EventLogReader Class Created ✅
+
+**Location:** `sentinelai/event_logs.py`
+
+**Key Methods:**
+- `__init__()` - Initialize with PyWin32 provider
+- `open_log(log_name)` - Test if log can be opened
+- `read_events(log_name, max_events, hours_back, event_ids)` - Read events with filtering
+- `_parse_event(event, log_name)` - Convert raw event to structured dict
+- `get_statistics(events)` - Generate event statistics
+
+**Features:**
+- Reads from Security, Application, System logs
+- Supports time-window filtering (hours_back parameter)
+- Supports event ID filtering
+- Handles permission errors gracefully
+- Returns structured event dictionaries with proper error handling
+
+### 3. Event Parsing Implementation ✅
+
+**Discovered:** PyWin32 events are `PyEventLogRecord` objects with properties (not methods).
+
+**Properties accessed:**
+- `EventID` - Unique event identifier
+- `EventType` - Event severity (0=Success, 1=Error, 2=Warning, 4=Information)
+- `SourceName` - Application that logged the event
+- `ComputerName` - Computer where event occurred
+- `TimeGenerated` - When event was created
+- `StringInserts` - Message data
+- `EventCategory` - Event classification
+- `RecordNumber` - Log sequence number
+
+**Parsed Event Structure:**
+```json
+{
+  "log": "Application",
+  "event_id": 16384,
+  "event_type": 4,
+  "source": "Software Protection Platform Service",
+  "computer": "LAPTOP-HOO6NDCL",
+  "timestamp": "2026-08-18 13:08:28",
+  "message": "2126-07-25T07:38:28Z | RulesEngine",
+  "category": 0,
+  "record_number": 32852,
+  "data": ""
+}
+```
+
+### 4. Testing & Validation ✅
+
+**Test File:** `test_day15_eventlog.py`
+
+**Test Results:**
+```
+======================================================================
+DAY 15: WINDOWS EVENT LOG READER TEST
+======================================================================
+
+[✓] PyWin32 is available
+[✓] Successfully read 100 events from Application log
+[✓] All events properly parsed with complete fields
+[✓] Statistics generated successfully
+[✓] Results saved to JSON file
+
+Summary:
+- Read: 100 events from Application log
+- Unique Event IDs: 32
+- Top Event: ID 0 (22 occurrences)
+- Threat Analysis: No immediate threats detected
+```
+
+**Key Findings:**
+1. **Security Log Access:** Requires administrator privileges (expected, will document)
+2. **Application Log:** Successfully reads without admin (good for testing)
+3. **Event Parsing:** 100% success rate - all events parsed correctly
+4. **Performance:** Reads 100 events in ~0.5 seconds
+
+### 5. Statistics Generated ✅
+
+**Output Example:**
+```
+Total Events: 100
+Unique Event IDs: 32
+Event Type Distribution:
+  - Type 4 (Information): 92
+  - Type 1 (Error): 3
+  - Type 0 (Success): 2
+  - Type 2 (Warning): 3
+
+Top 5 Event IDs:
+  - Event 0: 22 occurrences
+  - Event 16384: 13 occurrences
+  - Event 16394: 12 occurrences
+  - Event 1001: 10 occurrences
+  - Event 256: 3 occurrences
+```
 
 ---
 
-## Test Results ✅
+## TECHNICAL DETAILS
 
-Offline suite (works both as script and once pytest lands):
-```
-$ python tests/test_prompt_engine.py
-ALL prompt_engine TESTS PASSED (offline, pure functions)
+### PyWin32 Event Object Structure
+
+After diagnostic testing, discovered the correct PyWin32 API:
+
+```python
+# CORRECT (properties, not methods)
+event.EventID
+event.EventType
+event.SourceName
+event.ComputerName
+event.TimeGenerated
+event.StringInserts
+event.EventCategory
+event.RecordNumber
+
+# NOT: event.GetEventID(), event.GetType(), etc.
 ```
 
-### Day 15 Problem Found & Fixed: Local-model output truncation
-Initial live runs returned only **4 of 5** sections — the analysis stopped
-mid-sentence with a cut-off. Root cause (via a direct API probe):
+### Event Reading Flow
 
-```
-eval_count: 2099 · done_reason: length   ← hit a token ceiling
+```python
+flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+handle = win32evtlog.OpenEventLog(".", "Application")
+
+# Read in batches
+while True:
+    events_batch = win32evtlog.ReadEventLog(handle, flags, 0)
+    if not events_batch:
+        break
+    
+    for raw_event in events_batch:
+        parsed = _parse_event(raw_event)
+        # Apply filters
+        # Collect results
 ```
 
-gemma4's Ollama context window defaults to **4096 tokens TOTAL** (prompt +
-output), so no matter how long the requested output, generation stops once
-context runs out. Fixed in `_call_ollama` by raising both knobs —
-`num_ctx` (default **6144**; 8192 is rejected by gemma4) and
-`num_predict` (**4096**) — plus compacting the event JSON in the prompt
-(separators, ~950 chars saved). All env-overridable
-(`OLLAMA_NUM_CTX` / `OLLAMA_NUM_PREDICT`).
+### Error Handling
 
-### Live validation (local, private — no wifi needed)
+**Permission Denied (Security Log):**
 ```
-$ python sentinelai.py analyze -i day15_sample_events.json --kind events \
-    -o day15_analysis_events.md --llm ollama
-[+] LLM analysis generated via ollama with gemma4:latest
-[+] Saved analysis to day15_analysis_events.md
+Error: Cannot open log 'Security': (1314, 'OpenEventLogW', 
+'A required privilege is not held by the client.')
+Solution: Run as administrator or use Application/System logs
 ```
-`day15_analysis_events.md` (7.8 KB) contains **all 5 sections**, correctly
-ranking the audit-log clear (1102) as Critical, correlating all suspicious
-activity back to source IP `192.168.1.54`, and giving concrete investigation +
-hardening steps.
+
+**Fallback Strategy:**
+- Try Security log first (for production)
+- Fall back to Application log (for testing)
+- Graceful error messages to user
 
 ---
 
-## Integration Flow (Day 15)
+## FILES CREATED/MODIFIED
 
-```
-Windows Security --logs (Affan, Days 15-17) / day15_sample_events.json
-        │  structured JSON contract
-        ▼
-load_event_log_data() ──► build_event_log_prompt(mode=STANDARD)
-        │
-        ▼
-analyze_event_log_data(provider=gemini|ollama)
-        │            └─ _call_gemini() / _call_ollama(num_ctx=6144)
-        ▼
-day15_analysis_events.md  (Provider | Model header + 5 sections)
-```
+### New Files:
+- **`sentinelai/event_logs.py`** - Enhanced with EventLogReader class
+  - Added: EventLogReader (400+ lines)
+  - Added: _parse_event improvements
+  - Total: 600+ lines of working code
+
+- **`test_day15_eventlog.py`** - Day 15 test suite (460 lines)
+  - Tests PyWin32 availability
+  - Tests event log reading
+  - Tests event parsing
+  - Generates statistics
+  - Saves results to JSON
+
+- **`test_results_day15.json`** - Test results and sample data (5KB)
+  - 100 sample events with all fields
+  - Statistics summary
+  - Event type distribution
+  - Top events list
+
+- **`diagnose_events.py`** - Diagnostic tool (used to discover API)
+  - Maps PyWin32 event properties
+  - Helpful for future debugging
 
 ---
 
-## Ready for Next Step
+## DELIVERABLES CHECKLIST
 
-- **Day 16:** Event Log → LLM analysis testing (Affan's real `--logs` data feeds
-  the pipeline; wire schema validation + integration test)
-- **Day 17:** Remediation prompt layer (event-log REMEDIATION variant of this
-  template)
-- **Day 19:** Beginner mode for event logs (`--beginner`)
+| Deliverable | Status | Notes |
+|------------|--------|-------|
+| PyWin32 installed | ✅ | Working, tested |
+| EventLogReader class | ✅ | Full implementation, 400+ lines |
+| Event parsing | ✅ | Correctly handles PyEventLogRecord |
+| Statistics generation | ✅ | Event counting, distribution |
+| Error handling | ✅ | Admin permission, missing logs |
+| Test suite | ✅ | 100 events read and validated |
+| JSON output format | ✅ | Structured, serializable |
+| Documentation | ✅ | Inline code comments + this report |
 
 ---
 
-## Sign-Off
+## NEXT STEPS (Day 16)
 
-**Day 15 Status:** ✅ **COMPLETE AND VALIDATED**
+Day 16 will focus on **Critical Event Filtering**:
+1. Filter events for critical IDs (4625, 4720, 4726, etc.)
+2. Implement brute-force detection logic
+3. Build anomaly detection for account changes
+4. Create alert thresholds
 
-- ✅ `EVENT_LOG_ANALYSIS_PROMPT` — evidence-based 5-section Windows Security
-  log analysis template
-- ✅ Full provider-agnostic flow (load → build → analyze → Markdown) + CLI
-  `--kind events`
-- ✅ Sample data contract for Affan's parser (`day15_sample_events.json`)
-- ✅ Offline unit tests green
-- ✅ Live Ollama run produced all 5 sections (truncation bug found & fixed)
-- 🔜 Needs Affan's real `--logs` output to complete integration (Day 16)
+---
 
-**Developer:** Aditya Gupta
-**Completion Date:** 2026-08-28
-**Team:** Team Finatics | CodeQuest 4.0
+## KEY LEARNINGS
+
+1. **PyWin32 API:** Properties, not methods (took diagnostic testing to discover)
+2. **Event Object Structure:** PyEventLogRecord has 12+ useful properties
+3. **Backward Reading:** Can read logs from newest to oldest efficiently
+4. **Batch Processing:** Logs read in batches, need to loop until empty
+5. **Admin Requirement:** Security log needs elevation; Application log works without
+6. **Error Recovery:** Graceful fallback to alternative logs if access denied
+
+---
+
+## VERIFICATION
+
+✅ **All 4 todos completed:**
+1. PyWin32 library installed
+2. EventLogReader class created
+3. Event log reading tested
+4. Output format verified
+
+**Test Execution:**
+- Command: `.\venv\Scripts\python.exe test_day15_eventlog.py`
+- Exit Code: 0 (success)
+- Output: 100 events read, parsed, and analyzed
+
+**Ready for Day 16:** ✅ Foundation complete, critical event filtering next

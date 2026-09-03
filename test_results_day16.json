@@ -1,0 +1,79 @@
+{
+  "test_date": "2026-09-03T09:48:21.342971",
+  "test_count": 4,
+  "scenarios": [
+    {
+      "name": "Brute Force Attack",
+      "threat_level": "HIGH",
+      "critical_events": 9,
+      "total_alerts": 2,
+      "brute_force_detected": true,
+      "account_changes": 0,
+      "alerts": [
+        {
+          "severity": "HIGH",
+          "type": "Brute Force Attack",
+          "description": "7 failed login attempts detected",
+          "recommendation": "Investigate account access and review security logs"
+        },
+        {
+          "severity": "HIGH",
+          "type": "User Brute Force",
+          "user": "TestUser",
+          "attempts": 7,
+          "recommendation": "Reset password for TestUser and review access"
+        }
+      ]
+    },
+    {
+      "name": "Suspicious Account Changes",
+      "threat_level": "HIGH",
+      "critical_events": 6,
+      "total_alerts": 2,
+      "brute_force_detected": false,
+      "account_changes": 4,
+      "alerts": [
+        {
+          "severity": "HIGH",
+          "type": "Unusual Account Creation",
+          "count": 4,
+          "description": "4 accounts created - verify authorization",
+          "recommendation": "Review all newly created accounts with security team"
+        },
+        {
+          "severity": "MEDIUM",
+          "type": "Unusual Account Deletion",
+          "count": 2,
+          "description": "2 accounts deleted - verify authorization",
+          "recommendation": "Review all deleted accounts with security team"
+        }
+      ]
+    },
+    {
+      "name": "After-Hours Access",
+      "threat_level": "MEDIUM",
+      "critical_events": 5,
+      "total_alerts": 1,
+      "brute_force_detected": false,
+      "account_changes": 0,
+      "alerts": [
+        {
+          "severity": "MEDIUM",
+          "type": "After-Hours Network Access",
+          "count": 3,
+          "description": "3 network access attempts outside business hours",
+          "recommendation": "Review after-hours network access logs"
+        }
+      ]
+    },
+    {
+      "name": "Normal Activity",
+      "threat_level": "LOW",
+      "critical_events": 6,
+      "total_alerts": 0,
+      "brute_force_detected": false,
+      "account_changes": 0,
+      "alerts": []
+    }
+  ]
+}

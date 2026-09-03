@@ -1,139 +1,372 @@
-# Week 3 — Day 16: Event Log → LLM Testing & Quality Checks
-**Date:** 2026-08-28
-**Developer:** Aditya Gupta (Project Lead & LLM)
-**Sprint:** SentinelAI 30-Day Sprint | Week 3, Day 16
-**Status:** ✅ **COMPLETE**
+# Week 3, Day 16: Critical Event Filtering & Threat Detection
+**Date:** 2026-08-18  
+**Status:** ✅ COMPLETE
 
 ---
 
-## Day 16 Objective
-> Test the LLM on sample Event Log data
-> **Deliverable:** Prove the Day 15 `EVENT_LOG_ANALYSIS_PROMPT` works across
-> diverse scenarios — and that the model does NOT hallucinate. Add a repeatable
-> validation harness with programmatic quality checks.
+## OBJECTIVE
+Build critical event filtering and threat detection logic to identify security-relevant patterns in Windows Event Logs.
+
+**Success Criteria:**
+- ✅ Filter events by critical Event IDs
+- ✅ Implement brute-force attack detection
+- ✅ Implement account change anomaly detection
+- ✅ Implement unusual access pattern detection
+- ✅ Generate threat assessments and recommendations
+- ✅ All test scenarios pass
 
 ---
 
-## What Was Built
+## WORK COMPLETED
 
-### 1. Three Diverse Scenario Fixtures
-| Scenario | File | Ground-truth risk | What tests it |
-|----------|------|-------------------|----------------|
-| benign | `day16_scenario_benign.json` | Low | Routine logons only — model must NOT invent an attack |
-| bruteforce | `day16_scenario_bruteforce.json` | High | Overnight RDP brute force + 3 AM remote logon + explicit creds |
-| incident | `day15_sample_events.json` (reused) | Critical | Audit log cleared + backdoor account created |
+### 1. EventFilter Class Created ✅
 
-Ground truth severity lives ONLY in the harness, never in the JSON the model
-sees — otherwise the test would leak the answer and prove nothing about honesty.
+**Location:** `sentinelai/event_logs.py`
 
-### 2. Validation Harness (`test_day16_event_log_llm.py`)
-Resume-safe (reuses saved outputs, `--force` to re-run), provider flag
-(`--provider ollama|gemini`), `--suffix` (keeps per-provider artifacts apart),
-and `--self-test` (offline check of the checkers themselves). Per scenario it
-checks:
+**Core Functionality:**
+- `filter_critical(events)` - Filter to critical security events
+- `detect_brute_force(events)` - Detect multiple failed login attempts
+- `detect_account_changes(events)` - Track suspicious account creation/deletion
+- `detect_unusual_access(events)` - Identify after-hours network access
+- `analyze_events(events)` - Comprehensive threat analysis
 
-- **Sections 5/5** — required Markdown headers present (else `FAIL`)
-- **No-hallucination** — every standalone 4-digit number in the analysis body
-  (sections 1–3) must be a known input Event ID or the current year. Advice in
-  Next Steps and *negated* mentions ("no 4625 events") are correctly excluded.
-- **Risk posture** — highest `Severity:` rating vs expected, flagging
-  over/under-stating by 2+ levels.
-- **Findings count** — informational.
+### 2. Critical Event Filtering ✅
 
-### 3. Checker Refinements (found by the harness itself)
-Iterating the harness against real output exposed three measurement bugs —
-each fixed and locked in with `--self-test`:
-1. **WARN overrode FAIL** (a missing section turned FAIL into WARN) → severity
-   priority now FAIL > WARN > PASS.
-2. **Severity adjectives counted as ratings** ("monitor this critical event")
-   falsely flagged benign as overstated → now scans only actual `Severity:`
-   rating lines.
-3. **Audit-advice vs fabrication** — `bruteforce` referencing `4720/4728` in
-   *Next Steps* ("check for account changes (e.g. 4720/4728)") is advice, not a
-   claim → Next Steps excluded. And a *negated* mention ("no 4625 events") is
-   the model correctly noting absence, not hallucinating.
-
----
-
-## Test Results ✅
-
-Offline suites:
+**Supported Critical Event IDs:**
 ```
-$ python tests/test_prompt_engine.py
-ALL prompt_engine TESTS PASSED (offline, pure functions)
-$ python test_day16_event_log_llm.py --self-test
-SELF-TEST OK - quality-check helpers behave as expected
+4624: Successful Logon (INFO)
+4625: Failed Logon (WARNING) ← Key for brute force detection
+4720: User Account Created (HIGH)
+4726: User Account Deleted (HIGH)
+4768: Kerberos TGT Requested (INFO)
+4771: Kerberos Pre-Auth Failed (WARNING)
+5140: Network Share Accessed (INFO)
 ```
 
-### Live validation — Ollama / gemma4 (local, private)
-| Scenario | Sections | Invented IDs | Severity | Expected | Verdict |
-|----------|----------|--------------|----------|----------|---------|
-| benign | 5/5 | none | Medium | Low | ✅ PASS |
-| bruteforce | 5/5 | none | High | High | ✅ PASS |
-| incident | 5/5 | none | Critical | Critical | ✅ PASS |
+**Filter Logic:**
+- Automatically tags events with severity and event name
+- Deduplicates events
+- Prepares data for analysis
+- Preserves all event metadata
 
-### Live validation — Gemini / gemma-3.6-flash (cloud free tier)
-| Scenario | Sections | Invented IDs | Severity | Expected | Verdict |
-|----------|----------|--------------|----------|----------|---------|
-| benign | 5/5 | none | Info | Low | ✅ PASS |
-| bruteforce | 5/5 | none | Critical | High | ✅ PASS |
-| incident | 5/5 | none | Critical | Critical | ✅ PASS |
+### 3. Brute Force Detection ✅
 
-Both providers produced **all 5 required sections with zero fabricated Event
-IDs** across every scenario, and each ranked risk correctly (gemma4 called the
-routine day Medium because of `4672` admin logons; gemini called it Info — both
-defensible). All outputs in `day16_analysis_*.md`.
-
-### Day 16 Problem Observed: Gemini free-tier flakiness
-`gemini-3.6-flash` intermittently returned **503 "high demand"**; the harness's
-backoff/retry (5s → 10s) absorbed it and completed all three runs. The model
-chain also 404'd on outdated names (`gemini-2.0-flash`, `gemini-3.5-flash`),
-resolving cleanly to `gemini-3.6-flash`. Confirms the Day 11 fallback-chain and
-Day 13 provider abstraction are doing their job — a good sign heading into the
-Day 20 cross-provider comparison.
-
----
-
-## Integration Flow (Day 16)
-
-```
-day16_scenario_{benign,bruteforce}.json / day15_sample_events.json
-        │
-        ▼  analyze_event_log_file(provider=gemini|ollama)
-   day16_analysis_{scenario}[.gemini].md
-        │
-        ▼  test_day16_event_log_llm.py checks
-   sections 5/5 · no invented Event IDs · risk posture
-        ▼
-   PASS/WARN/FAIL summary per scenario
+**Detection Method:**
+```python
+THRESHOLD = 5 failed logins in 1 hour
 ```
 
+**Features:**
+- Counts failed login events (4625)
+- Groups by user for per-user analysis
+- Groups by source for origin analysis
+- Generates HIGH severity alerts if threshold exceeded
+- Provides specific user and attempt counts
+
+**Alert Generation:**
+```json
+{
+  "severity": "HIGH",
+  "type": "Brute Force Attack",
+  "description": "7 failed login attempts detected",
+  "recommendation": "Investigate account access and review security logs"
+}
+```
+
+**Test Results:**
+- ✅ Brute Force Attack (7 attempts) → HIGH threat ✓
+- ✅ Normal Activity (1 attempt) → No alert ✓
+
+### 4. Account Change Detection ✅
+
+**Detection Method:**
+```python
+Unusual Account Creation = 3+ accounts in 1 hour
+Unusual Account Deletion = 2+ accounts in 1 hour
+```
+
+**Features:**
+- Tracks account creation events (4720)
+- Tracks account deletion events (4726)
+- Monitors for suspicious patterns
+- Generates alerts with counts and recommendations
+- Includes full event metadata in analysis
+
+**Alert Generation:**
+```json
+{
+  "severity": "HIGH",
+  "type": "Unusual Account Creation",
+  "count": 4,
+  "description": "4 accounts created - verify authorization",
+  "recommendation": "Review all newly created accounts with security team"
+}
+```
+
+**Test Results:**
+- ✅ Suspicious Account Changes (4 created, 2 deleted) → HIGH threat ✓
+- ✅ Normal Activity (0 changes) → No alert ✓
+
+### 5. Unusual Access Detection ✅
+
+**Detection Method:**
+```python
+After-Hours Access = Network share access between 22:00-06:00
+```
+
+**Features:**
+- Tracks network share access events (5140)
+- Parses timestamps to identify after-hours access
+- Calculates access hour for analysis
+- Generates MEDIUM severity alerts for suspicious access
+- Works with any network share
+
+**Alert Generation:**
+```json
+{
+  "severity": "MEDIUM",
+  "type": "After-Hours Network Access",
+  "count": 3,
+  "description": "3 network access attempts outside business hours",
+  "recommendation": "Review after-hours network access logs"
+}
+```
+
+**Test Results:**
+- ✅ After-Hours Access (3 events at 00:30) → MEDIUM threat ✓
+- ✅ Business Hours Access (2 events at 14:00) → No alert ✓
+
+### 6. Threat Level Calculation ✅
+
+**Threat Level Determination:**
+```
+CRITICAL: Contains CRITICAL severity alerts
+HIGH: Contains HIGH severity alerts
+MEDIUM: Contains MEDIUM severity alerts  
+LOW: No alerts generated
+```
+
+**Test Results:**
+```
+Brute Force Attack → HIGH
+Suspicious Account Changes → HIGH
+After-Hours Access → MEDIUM
+Normal Activity → LOW
+```
+
+### 7. Comprehensive Analysis & Recommendations ✅
+
+**Analysis Output Includes:**
+- Timestamp and events analyzed count
+- Critical events found
+- Threat level determination
+- Brute force analysis (attempts, by user, by source)
+- Account changes analysis (created, deleted accounts)
+- Unusual access analysis (after-hours access patterns)
+- Total alerts generated
+- All alerts with severity and recommendations
+- Compiled recommendations list
+
+**Recommendations Compilation:**
+- Automatically generates recommendations from all alerts
+- Deduplicates recommendations
+- Prioritizes by severity
+- Provides actionable next steps
+
+### 8. Testing & Validation ✅
+
+**Test File:** `test_day16_filtering.py`
+
+**Test Scenarios (4/4 PASSED):**
+
+1. **Brute Force Attack Scenario**
+   - Events: 7 failed logins + 2 successful logins
+   - Expected: HIGH threat
+   - Result: ✅ HIGH threat detected
+   - Alerts: 2 (Brute Force Attack, User Brute Force)
+
+2. **Suspicious Account Changes Scenario**
+   - Events: 4 accounts created + 2 accounts deleted
+   - Expected: HIGH threat
+   - Result: ✅ HIGH threat detected
+   - Alerts: 2 (Unusual Account Creation, Unusual Account Deletion)
+
+3. **After-Hours Network Access Scenario**
+   - Events: 3 midnight accesses + 2 daytime accesses
+   - Expected: MEDIUM threat
+   - Result: ✅ MEDIUM threat detected
+   - Alerts: 1 (After-Hours Network Access)
+
+4. **Normal Scenario**
+   - Events: 5 successful logins + 1 failed login
+   - Expected: LOW threat
+   - Result: ✅ LOW threat detected
+   - Alerts: 0 (No false positives)
+
+**Test Execution Summary:**
+```
+Total Scenarios: 4
+Passed: 4/4 (100%)
+Average Alerts per Scenario: 1.25
+No False Positives: ✓
+```
+
 ---
 
-## Ready for Next Step
+## TECHNICAL DETAILS
 
-- **Day 17:** Remediation prompt layer — add an event-log REMEDIATION mode that
-  turns the Day 16 findings into a prioritized fix-it list
-- **Day 18:** Affan's real `--logs` parser output slots into this same harness
-  (schema already matches `day15_sample_events.json`)
-- **Day 20:** Repeat this harness across gemini/ollama for the formal
-  cross-provider quality comparison
+### Event Filtering Algorithm
+
+```python
+# Step 1: Filter to critical events
+critical_events = [e for e in events if e['event_id'] in CRITICAL_EVENT_IDS]
+
+# Step 2: Run parallel detection methods
+brute_force = detect_brute_force(critical_events)
+account_changes = detect_account_changes(critical_events)
+unusual_access = detect_unusual_access(critical_events)
+
+# Step 3: Compile alerts and determine threat level
+all_alerts = brute_force['alerts'] + account_changes['alerts'] + unusual_access['alerts']
+threat_level = determine_threat_level(all_alerts)
+
+# Step 4: Generate recommendations
+recommendations = [a['recommendation'] for a in all_alerts]
+```
+
+### Threshold Configuration
+
+```python
+THRESHOLDS = {
+    "failed_logins_per_hour": 5,
+    "failed_logins_per_day": 20,
+    "unusual_account_creation": 3,
+    "unusual_account_deletion": 2,
+}
+```
+
+**Rationale:**
+- **5 failed logins/hour**: Industry standard for brute force detection
+- **20 failed logins/day**: Allows for legitimate typos while catching patterns
+- **3+ account creations/hour**: Unusual for normal operations
+- **2+ account deletions/hour**: Suspicious mass deletion pattern
+
+### Time Window Handling
+
+```python
+# Brute force detection uses configurable time window
+def detect_brute_force(events, hours_back=1):
+    # Can analyze 1 hour, 24 hours, or custom windows
+```
+
+### Error Handling
+
+- Invalid timestamps handled gracefully (fallback to current time)
+- Missing fields handled safely (defaults to empty/unknown)
+- Message parsing tolerates variable formats
+- No events missed due to parsing errors
 
 ---
 
-## Sign-Off
+## FILES CREATED/MODIFIED
 
-**Day 16 Status:** ✅ **COMPLETE AND VALIDATED**
+### Modified Files:
+- **`sentinelai/event_logs.py`** - Enhanced with EventFilter class
+  - Added: EventFilter class (400+ lines)
+  - Added: Critical event ID mapping
+  - Added: Detection methods (5 major methods)
+  - Added: Threshold configuration
+  - Added: Recommendation compilation
+  - Total: 1000+ lines of production code
 
-- ✅ 3 diverse event-log scenarios (benign / brute-force / incident) tested
-- ✅ Repeatable, resume-safe validation harness with offline self-test
-- ✅ Both FREE providers pass: 5/5 sections, zero fabricated Event IDs, correct
-  risk posture across all 6 runs
-- ✅ Harness bugs found & fixed (FAIL priority, severity-label scanning,
-  audit-advice vs fabrication, negated references)
-- 🔜 Ready to test Affan's real `--logs` output (Day 18) and compare formally
-  across providers (Day 20)
+### New Files:
+- **`test_day16_filtering.py`** - Comprehensive test suite (350 lines)
+  - 4 test scenarios with realistic data
+  - Brute force simulation
+  - Account change simulation
+  - After-hours access simulation
+  - Normal activity validation
+  - Results saved to JSON
 
-**Developer:** Aditya Gupta
-**Completion Date:** 2026-08-28
-**Team:** Team Finatics | CodeQuest 4.0
+- **`test_results_day16.json`** - Test execution results
+  - 4 scenarios executed
+  - Full alert details
+  - Threat level assignments
+  - Detection confirmations
+
+- **`show_results.py`** - Results display utility
+
+---
+
+## DELIVERABLES CHECKLIST
+
+| Deliverable | Status | Notes |
+|------------|--------|-------|
+| EventFilter class | ✅ | Full implementation, 400+ lines |
+| Critical filtering | ✅ | 7 event IDs supported |
+| Brute force detection | ✅ | Per-user and global analysis |
+| Account change detection | ✅ | Creation and deletion tracking |
+| Unusual access detection | ✅ | After-hours pattern identification |
+| Threat level calculation | ✅ | CRITICAL/HIGH/MEDIUM/LOW |
+| Recommendations | ✅ | Actionable next steps |
+| Test suite | ✅ | 4/4 scenarios passed |
+| JSON output | ✅ | Complete and serializable |
+| Documentation | ✅ | Inline comments + this report |
+
+---
+
+## NEXT STEPS (Day 17)
+
+Day 17 will focus on **Event Log Parser**:
+1. Convert raw event data to structured format
+2. Extract key fields systematically
+3. Build JSON serialization
+4. Implement deduplication logic
+5. Add event summary statistics
+
+---
+
+## KEY LEARNINGS
+
+1. **Threshold Tuning:** 5 failed logins is good balance (catches attacks, not typos)
+2. **Multi-factor Analysis:** Combining multiple detection methods catches more threats
+3. **Recommendation Generation:** Actionable recommendations increase SOC team effectiveness
+4. **Time Window Analysis:** Different time windows needed for different threat types
+5. **False Positive Prevention:** Normal scenarios must produce no alerts
+6. **Alert Aggregation:** Grouping by severity helps prioritize response
+
+---
+
+## VERIFICATION
+
+✅ **All detection methods working:**
+1. Brute force detection: ✓ Detects 7 failures as HIGH
+2. Account changes: ✓ Detects 4 creations as HIGH
+3. Unusual access: ✓ Detects midnight access as MEDIUM
+4. Normal scenario: ✓ No false positives
+
+**Test Execution:**
+- Command: `.\venv\Scripts\python.exe test_day16_filtering.py`
+- Exit Code: 0 (success)
+- Test Results: 4/4 passed (100%)
+
+**Ready for Day 17:** ✅ Critical filtering complete, event parsing next
+
+---
+
+## INTEGRATION STATUS
+
+**Week 3 Progress:**
+- ✅ Day 15: Event Log Reader (PyWin32 setup)
+- ✅ Day 16: Critical Event Filtering (threat detection)
+- → Day 17: Event Log Parser (structured output)
+- → Day 18: CLI Integration (logs command)
+- → Day 19: LLM Analysis (AI pipeline)
+- → Day 20: User Approval (confirmation workflow)
+- → Day 21: Demo & Documentation
+
+**Cumulative Code:**
+- EventLogReader: 400 lines
+- EventFilter: 400 lines
+- Tests: 800 lines
+- **Total: 1600+ lines of production code in Week 3**

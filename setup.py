@@ -15,6 +15,7 @@ setup(
         "click>=8.1.3",
         "colorama>=0.4.6",
         "pydantic>=2.0.0",
+        "pywin32>=306; sys_platform == 'win32'",
     ],
     entry_points={
         "console_scripts": [

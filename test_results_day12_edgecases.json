@@ -1,0 +1,99 @@
+{
+  "test_suite": "Day 12 - Edge Case Handling",
+  "timestamp": "2026-08-18T12:15:57.636977",
+  "total_tests": 10,
+  "passed": 10,
+  "failed": 0,
+  "results": [
+    {
+      "test_name": "Test 1: Normal Scan (Baseline)",
+      "target": "127.0.0.1",
+      "extra_args": "",
+      "status": "PASS",
+      "details": "Scan completed successfully",
+      "exit_code": 0,
+      "timestamp": "2026-08-18T12:14:36.510901"
+    },
+    {
+      "test_name": "Test 2: Host with No Open Ports",
+      "target": "127.0.0.1",
+      "extra_args": "--aggressive",
+      "status": "PASS",
+      "details": "Scan completed successfully",
+      "exit_code": 0,
+      "timestamp": "2026-08-18T12:14:58.608645"
+    },
+    {
+      "test_name": "Test 3: Short Timeout (Edge Case)",
+      "target": "127.0.0.1",
+      "extra_args": "--timeout 2",
+      "status": "PASS",
+      "details": "Correctly handled edge case with error",
+      "exit_code": 1,
+      "timestamp": "2026-08-18T12:15:00.767668"
+    },
+    {
+      "test_name": "Test 4: Invalid IP Address",
+      "target": "999.999.999.999",
+      "extra_args": "",
+      "status": "PASS",
+      "details": "Correctly handled edge case with error",
+      "exit_code": 1,
+      "timestamp": "2026-08-18T12:15:03.639813"
+    },
+    {
+      "test_name": "Test 5: Invalid Target Format",
+      "target": "not-a-valid-target!!!",
+      "extra_args": "",
+      "status": "PASS",
+      "details": "Correctly handled edge case with error",
+      "exit_code": 0,
+      "timestamp": "2026-08-18T12:15:03.770323"
+    },
+    {
+      "test_name": "Test 6: Localhost by Name",
+      "target": "localhost",
+      "extra_args": "",
+      "status": "PASS",
+      "details": "Scan completed successfully",
+      "exit_code": 0,
+      "timestamp": "2026-08-18T12:15:11.679311"
+    },
+    {
+      "test_name": "Test 7: Aggressive Scan",
+      "target": "127.0.0.1",
+      "extra_args": "--aggressive",
+      "status": "PASS",
+      "details": "Scan completed successfully",
+      "exit_code": 0,
+      "timestamp": "2026-08-18T12:15:33.932284"
+    },
+    {
+      "test_name": "Test 8: JSON Output",
+      "target": "127.0.0.1",
+      "extra_args": "--json",
+      "status": "PASS",
+      "details": "Scan completed successfully",
+      "exit_code": 0,
+      "timestamp": "2026-08-18T12:15:41.867561"
+    },
+    {
+      "test_name": "Test 9: LLM Format Output",
+      "target": "127.0.0.1",
+      "extra_args": "--llm-format",
+      "status": "PASS",
+      "details": "Scan completed successfully",
+      "exit_code": 0,
+      "timestamp": "2026-08-18T12:15:49.768930"
+    },
+    {
+      "test_name": "Test 10: Analysis Mode",
+      "target": "127.0.0.1",
+      "extra_args": "--analyze",
+      "status": "PASS",
+      "details": "Scan completed successfully",
+      "exit_code": 0,
+      "timestamp": "2026-08-18T12:15:57.636900"
+    }
+  ]
+}
