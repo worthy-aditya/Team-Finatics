@@ -7,7 +7,9 @@ import json
 from colorama import Fore, Style, init
 from sentinelai.scanner import NmapScanner, Scanner
 from sentinelai.natural_cli import NaturalLanguageCLI
+from sentinelai.approval import ApprovalError, request_approval
 from sentinelai.routing import auto_parse_to_file, is_raw_log_export, route_provider
+from sentinelai.logs_command import build_logs_command
 from sentinelai.prompt_engine import (
     PromptMode,
     analyze_event_log_file,
@@ -35,9 +37,25 @@ def main():
 @click.option("--timeout", type=int, default=120, help="Scan timeout in seconds (default: 120)")
 @click.option("--json", "output_json", is_flag=True, help="Output results as JSON (no prompts)")
 @click.option("--json-file", type=str, default=None, help="Save JSON results to specified file")
-def scan(target, aggressive, fast, timeout, output_json, json_file):
+@click.option("--confirm", "require_confirmation", is_flag=True, help="Ask for approval before scanning")
+@click.option("--yes", "assume_yes", is_flag=True, help="Approve a confirmed operation non-interactively")
+def scan(target, aggressive, fast, timeout, output_json, json_file, require_confirmation, assume_yes):
     """Run security scan on target"""
     
+    # Day 20 human-in-the-loop approval (reuses sentinelai.approval).
+    if require_confirmation:
+        try:
+            approved = request_approval(
+                "security scan",
+                target,
+                assume_yes=assume_yes,
+            )
+        except ApprovalError as exc:
+            raise click.ClickException(str(exc)) from exc
+        if not approved:
+            click.echo("Scan cancelled: approval was not granted.")
+            return
+
     # Validate target format
     if not Scanner.validate_target(target):
         click.echo(f"{Fore.YELLOW}[!] Warning: Target '{target}' format may be invalid. Proceeding anyway...{Style.RESET_ALL}")
@@ -179,7 +197,7 @@ def parse(input_file, output_file, logs, host):
 def natural_cli():
     """
     🤖 Natural Language CLI Interface
-    
+
     Start an interactive session where you can use plain English commands
     to run security scans and generate reports.
     
@@ -200,6 +218,9 @@ def natural_cli():
 def version():
     """Show version"""
     click.echo("SentinelAI CLI v0.1.0")
+
+
+main.add_command(build_logs_command())
 
 
 if __name__ == "__main__":

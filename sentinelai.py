@@ -11,6 +11,7 @@ from commands.network import network
 from commands.report import report
 from commands.natural_cli import natural_cli
 from commands.analyze import analyze
+from commands.logs import logs
 
 console = Console()
 
@@ -30,6 +31,7 @@ cli.add_command(network)
 cli.add_command(report)
 cli.add_command(natural_cli)
 cli.add_command(analyze)
+cli.add_command(logs)
 
 if __name__ == "__main__":
     cli()
