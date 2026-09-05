@@ -11,6 +11,7 @@ from sentinelai.natural_cli import NaturalLanguageCLI
 from sentinelai.approval import ApprovalError, request_approval
 from sentinelai.routing import auto_parse_to_file, is_raw_log_export, route_provider
 from sentinelai.logs_command import build_logs_command
+from commands.report import report as report_command
 from sentinelai.prompt_engine import (
     PromptMode,
     analyze_event_log_file,
@@ -80,28 +81,30 @@ def scan(target, aggressive, fast, timeout, output_json, json_file, require_conf
             info("Standard scan mode")
     
     # Execute Nmap scan using NmapScanner wrapper
-    # Day 24: quiet in --output-json mode so stdout stays JSON-pure.
-    scanner = NmapScanner(target, quiet=output_json)
-    
+    # Day 24/25: quiet in machine mode (--json or --json-file) so stdout
+    # stays JSON-pure; --json-file works without --json too.
+    machine_mode = bool(output_json or json_file)
+    scanner = NmapScanner(target, quiet=machine_mode)
+
     if scanner.scan(arguments=arguments):
-        if output_json:
-            # Output JSON to stdout
-            click.echo(scanner.to_json_string())
-        else:
-            success("Scan completed successfully!")
-            step("SCAN RESULTS")
-            # Print results
-            summary = scanner.get_summary()
-            print_panel(summary, title=f"Scan results - {target}")
-            
-            # Handle JSON file output
+        if machine_mode:
+            if output_json:
+                # Output JSON to stdout (machine-readable, nothing else).
+                click.echo(scanner.to_json_string())
             if json_file:
                 scanner.export_json(json_file)
-            else:
-                # Suggest saving to JSON file
-                default_json_filename = f"scan_{target.replace('.', '_').replace('/', '_')}.json"
-                if click.confirm(f"\nSave results to {default_json_filename}?", default=False):
-                    scanner.export_json(default_json_filename)
+            return scanner.get_results()
+
+        success("Scan completed successfully!")
+        step("SCAN RESULTS")
+        # Print results
+        summary = scanner.get_summary()
+        print_panel(summary, title=f"Scan results - {target}")
+
+        # Suggest saving to JSON file
+        default_json_filename = f"scan_{target.replace('.', '_').replace('/', '_')}.json"
+        if click.confirm(f"\nSave results to {default_json_filename}?", default=False):
+            scanner.export_json(default_json_filename)
     else:
         if not output_json:
             error("Scan failed")
@@ -221,6 +224,9 @@ def version():
 
 
 main.add_command(build_logs_command())
+# Day 25 parity: `report` lived only on the root CLI. The one-command E2E
+# pipeline needs it on BOTH entry points, so reuse the same implementation.
+main.add_command(report_command)
 
 
 if __name__ == "__main__":

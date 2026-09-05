@@ -44,6 +44,46 @@ def report(input, output, format):
     success("Report generated successfully!")
 
 
+def _normalize_scan(scan_data):
+    """Yield (ip, status, rows) for BOTH scan schema generations.
+
+    Week-1 schema:  host = {ip, status, protocols: {tcp: [{port, state, name,
+                    product, version, extrainfo}]}}
+    Current schema (Week 2+, NmapScanner.parse_results): host = {address,
+                    status, hostnames, ports: [{port, protocol, state,
+                    service: {name, product, version}, service_string}]}
+    Found by the Day 25 E2E test: report.py crashed with KeyError 'ip' on
+    current-schema files because it only understood the Week-1 layout.
+    """
+    for host in scan_data.get("hosts", []):
+        ip = host.get("address") or host.get("ip") or "unknown"
+        status = host.get("status", "unknown")
+        rows = []
+        if isinstance(host.get("ports"), list) and host["ports"]:
+            for p in host["ports"]:
+                svc = p.get("service") if isinstance(p.get("service"), dict) else {}
+                rows.append({
+                    "proto": p.get("protocol", "tcp"),
+                    "port": p.get("port"),
+                    "state": p.get("state", "unknown"),
+                    "name": svc.get("name", "") or (p.get("service_string") or "").strip(),
+                    "product": svc.get("product", ""),
+                    "version": svc.get("version", ""),
+                })
+        else:
+            for proto, ports in (host.get("protocols") or {}).items():
+                for p in ports or []:
+                    rows.append({
+                        "proto": proto,
+                        "port": p.get("port"),
+                        "state": p.get("state", "unknown"),
+                        "name": p.get("name", ""),
+                        "product": p.get("product", ""),
+                        "version": p.get("version", ""),
+                    })
+        yield ip, status, rows
+
+
 def _generate_text_report(scan_data, output_base):
     """Generate text format report"""
     filename = f"{output_base}.txt"
@@ -53,32 +93,33 @@ def _generate_text_report(scan_data, output_base):
         f.write("SENTINELAI NETWORK SCAN REPORT\n")
         f.write("=" * 70 + "\n")
         f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Target: {scan_data.get('target', 'Unknown')}\n")
+        f.write(f"Target: {scan_data.get('target', scan_data.get('metadata', {}).get('target', 'Unknown'))}\n")
         f.write("=" * 70 + "\n\n")
         
-        hosts = scan_data.get('hosts', [])
-        if not hosts:
-            f.write("[!] No hosts found in scan data\n")
-            return
-        
-        for host in hosts:
-            f.write(f"Host: {host['ip']} ({host['status']})\n")
+        wrote_any = False
+        for ip, status, rows in _normalize_scan(scan_data):
+            wrote_any = True
+            f.write(f"Host: {ip} ({status})\n")
             f.write("-" * 70 + "\n")
             
-            protocols = host.get('protocols', {})
-            for proto, ports in protocols.items():
-                open_ports = [p for p in ports if p['state'] == 'open']
-                if open_ports:
-                    f.write(f"\n{proto.upper()} Protocol:\n")
-                    for port in open_ports:
-                        f.write(f"  Port {port['port']}: {port['state'].upper()}\n")
-                        f.write(f"    Service: {port['name']}\n")
-                        if port.get('product'):
-                            f.write(f"    Product: {port['product']}\n")
-                        if port.get('version'):
-                            f.write(f"    Version: {port['version']}\n")
-                        f.write("\n")
+            current_proto = None
+            for row in rows:
+                if row["state"] != "open":
+                    continue
+                if row["proto"] != current_proto:
+                    current_proto = row["proto"]
+                    f.write(f"\n{current_proto.upper()} Protocol:\n")
+                f.write(f"  Port {row['port']}: {row['state'].upper()}\n")
+                f.write(f"    Service: {row['name']}\n")
+                if row["product"]:
+                    f.write(f"    Product: {row['product']}\n")
+                if row["version"]:
+                    f.write(f"    Version: {row['version']}\n")
+                f.write("\n")
             f.write("\n")
+        
+        if not wrote_any:
+            f.write("[!] No hosts found in scan data\n")
         
         f.write("=" * 70 + "\n")
         f.write("End of Report\n")
@@ -92,17 +133,15 @@ def _generate_json_report(scan_data, output_base):
     
     report = {
         "generated": datetime.now().isoformat(),
-        "target": scan_data.get('target'),
+        "target": scan_data.get('target', scan_data.get('metadata', {}).get('target')),
         "scan_summary": {},
         "details": scan_data
     }
     
-    # Add summary
-    for host in scan_data.get('hosts', []):
-        total_open = 0
-        for proto, ports in host.get('protocols', {}).items():
-            total_open += sum(1 for p in ports if p['state'] == 'open')
-        report['scan_summary'][host['ip']] = {'status': host['status'], 'open_ports': total_open}
+    # Add summary (works for both Week-1 and current scan schemas)
+    for ip, status, rows in _normalize_scan(scan_data):
+        open_ports = sum(1 for r in rows if r["state"] == "open")
+        report['scan_summary'][ip] = {'status': status, 'open_ports': open_ports}
     
     with open(filename, 'w') as f:
         json.dump(report, f, indent=2)
@@ -117,12 +156,9 @@ def _generate_csv_report(scan_data, output_base):
     with open(filename, 'w') as f:
         f.write("IP,Status,Protocol,Port,State,Service,Product,Version\n")
         
-        for host in scan_data.get('hosts', []):
-            ip = host['ip']
-            status = host['status']
-            
-            for proto, ports in host.get('protocols', {}).items():
-                for port in ports:
-                    f.write(f'{ip},{status},{proto},{port["port"]},{port["state"]},{port["name"]},{port.get("product", "")},{port.get("version", "")}\n')
+        for ip, status, rows in _normalize_scan(scan_data):
+            for r in rows:
+                f.write(f'{ip},{status},{r["proto"]},{r["port"]},{r["state"]},'
+                        f'{r["name"]},{r["product"]},{r["version"]}\n')
     
     success(f"Saved report to {filename}")
