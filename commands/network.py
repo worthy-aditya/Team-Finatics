@@ -1,43 +1,43 @@
 import click
 import socket
 import platform
-from colorama import Fore, Style, init
 
-init(autoreset=True)
+from sentinelai.ui import error, info, kv, warn
 
 @click.command()
 def network():
     """Display network information and interface details."""
-    click.echo(f"{Fore.CYAN}[*] Gathering network information...{Style.RESET_ALL}\n")
+    info("Gathering network information...")
+    click.echo()
     
     # Get hostname
     try:
         hostname = socket.gethostname()
-        click.echo(f"{Fore.GREEN}Hostname:{Style.RESET_ALL} {hostname}")
-    except:
-        click.echo(f"{Fore.RED}[!] Could not retrieve hostname{Style.RESET_ALL}")
+        kv("Hostname", hostname)
+    except Exception:
+        error("Could not retrieve hostname")
     
     # Get local IP
     try:
         local_ip = socket.gethostbyname(hostname)
-        click.echo(f"{Fore.GREEN}Local IP:{Style.RESET_ALL} {local_ip}")
-    except:
-        click.echo(f"{Fore.RED}[!] Could not retrieve local IP{Style.RESET_ALL}")
+        kv("Local IP", local_ip)
+    except Exception:
+        error("Could not retrieve local IP")
     
     # Get OS info
     try:
         os_info = platform.system()
         os_version = platform.release()
-        click.echo(f"{Fore.GREEN}Operating System:{Style.RESET_ALL} {os_info} {os_version}")
-    except:
-        click.echo(f"{Fore.RED}[!] Could not retrieve OS info{Style.RESET_ALL}")
+        kv("Operating System", f"{os_info} {os_version}")
+    except Exception:
+        error("Could not retrieve OS info")
     
     # Get Python version
     try:
         python_version = platform.python_version()
-        click.echo(f"{Fore.GREEN}Python Version:{Style.RESET_ALL} {python_version}")
-    except:
-        click.echo(f"{Fore.RED}[!] Could not retrieve Python version{Style.RESET_ALL}")
+        kv("Python Version", python_version)
+    except Exception:
+        error("Could not retrieve Python version")
     
-    click.echo("\n" + "=" * 60)
-    click.echo(f"{Fore.YELLOW}💡 Tip: Use 'sentinelai scan --target <IP>' to scan this system or others{Style.RESET_ALL}")
+    click.echo()
+    warn("Tip: Use 'sentinelai scan --target <IP>' to scan this system or others")

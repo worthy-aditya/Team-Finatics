@@ -24,7 +24,8 @@ import json
 from typing import Any, Dict, List, Optional
 
 import click
-from colorama import Fore, Style
+
+from sentinelai.ui import error, info, print_markdown, spinner, success
 
 from sentinelai.event_bridge import (
     collect_events,
@@ -69,18 +70,21 @@ def build_logs_command():
                 use_sample=sample, hours=hours, event_ids=ids, max_events=max_events
             )
         except RuntimeError as exc:
-            click.echo(f"{Fore.RED}[!] {exc}{Style.RESET_ALL}")
+            error(str(exc))
             raise click.Abort()
 
+        # Day 24: keep machine-readable (--json) stdout pure — human status
+        # lines only print for interactive runs.
         source_label = "sample" if source == "sample" else "Windows Security log"
-        click.echo(f"{Fore.CYAN}[*] Read {len(events)} event(s) from {source_label} "
-                   f"(host={host}){Style.RESET_ALL}")
+        if not output_json:
+            info(f"Read {len(events)} event(s) from {source_label} (host={host})")
 
         # Save the harness-schema JSON for later `analyze -i <file> --kind events`.
         if output_file:
             n = events_to_schema_file(events, host, output_file)
-            click.echo(f"{Fore.GREEN}[+] Saved {n} events to {output_file} "
-                       f"(schema JSON for `analyze --kind events`){Style.RESET_ALL}")
+            if not output_json:
+                success(f"Saved {n} events to {output_file} "
+                        f"(schema JSON for `analyze --kind events`)")
 
         summary = summarize(events)
 
@@ -119,7 +123,8 @@ def build_logs_command():
                 click.echo(f"  - {rec}")
         if llm_markdown:
             click.echo()
-            click.echo(llm_markdown)
+            # Day 24: render the LLM Markdown with the shared Rich console.
+            print_markdown(llm_markdown)
 
     return logs
 
@@ -141,9 +146,9 @@ def _run_llm_analysis(events: List[Dict[str, Any]], host: str,
     prompt_mode = PromptMode(mode.lower())
 
     data = native_events_to_schema(events, host=host)
-    click.echo(f"{Fore.CYAN}[*] Analyzing {data['count']} event(s) via "
-               f"{provider.value} (mode={mode}){Style.RESET_ALL}")
-    result = analyze_event_log_data(data, provider=provider, mode=prompt_mode)
+    # Day 24: spinner while the LLM works (free providers can take minutes).
+    with spinner(f"Analyzing {data['count']} event(s) via {provider.value} (mode={mode})..."):
+        result = analyze_event_log_data(data, provider=provider, mode=prompt_mode)
     return (
         f"### LLM Analysis ({provider.value} / `{result.model}`)\n\n"
         f"{result.analysis}"

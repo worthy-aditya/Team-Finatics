@@ -9,8 +9,10 @@ import logging
 from typing import Dict, List, Optional
 from datetime import datetime
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
+from sentinelai.ui import error, info, success
+
+# Configure logging (INFO: DEBUG made nmap/python-nmap spam stdout)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -47,8 +49,12 @@ class Scanner:
 class NmapScanner(Scanner):
     """Nmap-based security scanner using python-nmap library"""
     
-    def __init__(self, target):
+    def __init__(self, target, quiet: bool = False):
         super().__init__(target)
+        # Day 24: quiet=True suppresses human status lines so machine-readable
+        # paths (scan --output-json) keep stdout JSON-pure. Failures still land
+        # in the logger and self.scan_errors.
+        self.quiet = quiet
         
         # Validate target format
         if not self.validate_target(target):
@@ -71,18 +77,20 @@ class NmapScanner(Scanner):
             bool: True if scan successful, False otherwise
         """
         try:
-            logger.info(f"[*] Scanning target: {self.target}")
-            logger.info(f"[*] Using arguments: {arguments}")
-            print(f"[*] Scanning target: {self.target}")
-            print(f"[*] Using arguments: {arguments}")
+            logger.info("Scanning target: %s", self.target)
+            logger.info("Using arguments: %s", arguments)
+            # The CLI already announces the target; only add the arguments here.
+            if not self.quiet:
+                info(f"Using arguments: {arguments}")
             
             self.nm.scan(self.target, arguments=arguments)
             
             # Check if scan found any hosts
             if not self.nm.all_hosts():
-                error_msg = f"[!] No hosts found for target: {self.target}"
+                error_msg = f"No hosts found for target: {self.target}"
                 logger.warning(error_msg)
-                print(error_msg)
+                if not self.quiet:
+                    error(error_msg)
                 self.scan_errors.append("No hosts found")
                 return False
             
@@ -92,15 +100,15 @@ class NmapScanner(Scanner):
             return True
             
         except nmap.PortScannerError as e:
-            error_msg = f"[!] Nmap error: {str(e)}"
-            logger.error(error_msg)
-            print(error_msg)
+            logger.error("Nmap error: %s", e)
+            if not self.quiet:
+                error(f"Nmap error: {e}")
             self.scan_errors.append(str(e))
             return False
         except Exception as e:
-            error_msg = f"[!] Unexpected error: {str(e)}"
-            logger.error(error_msg)
-            print(error_msg)
+            logger.error("Unexpected error: %s", e)
+            if not self.quiet:
+                error(f"Unexpected error: {e}")
             self.scan_errors.append(str(e))
             return False
     
@@ -228,7 +236,8 @@ class NmapScanner(Scanner):
                 self.parsed_results["hosts"].append(host_info)
                 
         except Exception as e:
-            print(f"[!] Error parsing results: {e}")
+            if not self.quiet:
+                error(f"Error parsing results: {e}")
             logger.error(f"Parse error: {str(e)}")
         
         return self.parsed_results
@@ -313,11 +322,11 @@ class NmapScanner(Scanner):
         try:
             with open(filepath, 'w') as f:
                 json.dump(self.parsed_results, f, indent=2)
-            print(f"[+] Results exported to: {filepath}")
+            success(f"Results exported to: {filepath}")
             logger.info(f"Results exported to {filepath}")
             return True
         except Exception as e:
-            print(f"[!] Error exporting to JSON: {e}")
+            error(f"Error exporting to JSON: {e}")
             logger.error(f"JSON export failed: {str(e)}")
             return False
     

@@ -1,9 +1,7 @@
 import click
-from colorama import Fore, Style, init
+from sentinelai.ui import error, info, print_panel, spinner, step, success, warn
 from sentinelai.scanner import NmapScanner, Scanner
 from sentinelai.approval import ApprovalError, request_approval
-
-init(autoreset=True)
 
 @click.command()
 @click.option("--target", required=True, help="Target IP or hostname to scan")
@@ -31,35 +29,39 @@ def scan(target, aggressive, fast, timeout, require_confirmation, assume_yes):
 
     # Validate target
     if not Scanner.validate_target(target):
-        click.echo(f"{Fore.YELLOW}[!] Warning: Target '{target}' format may be invalid{Style.RESET_ALL}")
+        warn(f"Warning: Target '{target}' format may be invalid")
     
-    click.echo(f"{Fore.CYAN}[*] Scanning target: {target}{Style.RESET_ALL}")
+    info(f"Scanning target: {target}")
 
     if fast:
         # Fast: top 20 most common ports
         arguments = "-p 22,80,443,3306,5432,8080,8443,25,53,110,143,3389,1433,27017,5000,5900,9200,9300,11211,6379"
-        click.echo(f"{Fore.YELLOW}[*] Fast scan mode (top 20 ports) - ~30 seconds{Style.RESET_ALL}")
+        info("Fast scan mode (top 20 ports) - ~30 seconds")
     elif aggressive:
         # Aggressive: full scan with scripts
         arguments = "-sV -sC -p 1-1000"
-        click.echo(f"{Fore.YELLOW}[*] Aggressive scan mode (may take 5-10 minutes){Style.RESET_ALL}")
+        info("Aggressive scan mode (may take 5-10 minutes)")
     else:
         # Standard: service detection on common ports
         arguments = "-sV -p 1-1000"
-        click.echo(f"{Fore.YELLOW}[*] Standard scan mode (~2-3 minutes){Style.RESET_ALL}")
+        info("Standard scan mode (~2-3 minutes)")
 
     scanner = NmapScanner(target)
 
-    if scanner.scan(arguments=arguments):
-        click.echo(f"{Fore.GREEN}[+] Scan completed successfully!{Style.RESET_ALL}\n")
-        click.echo("=" * 60)
-        click.echo("SCAN RESULTS")
-        click.echo("=" * 60)
+    # Day 24: spinner progress indicator while nmap works. The scanner's own
+    # status lines print through the same ui console (rendered above the
+    # spinner in a live terminal; plain text when output is not a TTY).
+    with spinner(f"Running nmap scan on {target} (this can take a while)..."):
+        scan_ok = scanner.scan(arguments=arguments)
+
+    if scan_ok:
+        success("Scan completed successfully!")
+        step("SCAN RESULTS")
         summary = scanner.get_summary()
-        click.echo(summary)
+        print_panel(summary, title=f"Scan results - {target}")
         return scanner.get_results()
-    else:
-        click.echo(f"{Fore.RED}[!] Scan failed{Style.RESET_ALL}")
-        if scanner.scan_errors:
-            click.echo(f"{Fore.RED}[!] Details: {'; '.join(scanner.scan_errors)}{Style.RESET_ALL}")
-        return None
+
+    error("Scan failed")
+    if scanner.scan_errors:
+        error(f"Details: {'; '.join(scanner.scan_errors)}")
+    return None

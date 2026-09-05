@@ -4,7 +4,8 @@ CLI entry point for SentinelAI
 
 import click
 import json
-from colorama import Fore, Style, init
+
+from sentinelai.ui import error, info, print_markdown, print_panel, spinner, step, success, warn
 from sentinelai.scanner import NmapScanner, Scanner
 from sentinelai.natural_cli import NaturalLanguageCLI
 from sentinelai.approval import ApprovalError, request_approval
@@ -16,8 +17,6 @@ from sentinelai.prompt_engine import (
     analyze_scan_file,
     resolve_provider,
 )
-
-init(autoreset=True)
 
 # Free providers the team actually uses right now; others are accepted by
 # the switcher but fail with a friendly "paid/pending" message (Day 13).
@@ -58,43 +57,42 @@ def scan(target, aggressive, fast, timeout, output_json, json_file, require_conf
 
     # Validate target format
     if not Scanner.validate_target(target):
-        click.echo(f"{Fore.YELLOW}[!] Warning: Target '{target}' format may be invalid. Proceeding anyway...{Style.RESET_ALL}")
+        warn(f"Warning: Target '{target}' format may be invalid. Proceeding anyway...")
     
     if not output_json:
-        click.echo(f"{Fore.CYAN}[*] Scanning target: {target}{Style.RESET_ALL}")
+        info(f"Scanning target: {target}")
     
     # Build Nmap arguments based on speed preference
     if fast:
         # Top 20 most common ports only - very fast
         arguments = "-p 22,80,443,3306,5432,8080,8443,25,53,110,143,3389,1433,27017,5000,5900,9200,9300,11211,6379"
         if not output_json:
-            click.echo(f"{Fore.YELLOW}[*] Fast scan mode (top 20 ports){Style.RESET_ALL}")
+            info("Fast scan mode (top 20 ports)")
     elif aggressive:
         # Full scan with scripts - very slow
         arguments = "-sV -sC -p 1-1000"
         if not output_json:
-            click.echo(f"{Fore.YELLOW}[*] Aggressive scan mode enabled (may take several minutes){Style.RESET_ALL}")
+            info("Aggressive scan mode enabled (may take several minutes)")
     else:
         # Balanced: service detection on common ports
         arguments = "-sV -p 1-1000"
         if not output_json:
-            click.echo(f"{Fore.YELLOW}[*] Standard scan mode{Style.RESET_ALL}")
+            info("Standard scan mode")
     
     # Execute Nmap scan using NmapScanner wrapper
-    scanner = NmapScanner(target)
+    # Day 24: quiet in --output-json mode so stdout stays JSON-pure.
+    scanner = NmapScanner(target, quiet=output_json)
     
     if scanner.scan(arguments=arguments):
         if output_json:
             # Output JSON to stdout
             click.echo(scanner.to_json_string())
         else:
-            click.echo(f"{Fore.GREEN}[+] Scan completed successfully!{Style.RESET_ALL}\n")
-            click.echo("=" * 60)
-            click.echo("SCAN RESULTS")
-            click.echo("=" * 60)
+            success("Scan completed successfully!")
+            step("SCAN RESULTS")
             # Print results
             summary = scanner.get_summary()
-            click.echo(summary)
+            print_panel(summary, title=f"Scan results - {target}")
             
             # Handle JSON file output
             if json_file:
@@ -102,13 +100,13 @@ def scan(target, aggressive, fast, timeout, output_json, json_file, require_conf
             else:
                 # Suggest saving to JSON file
                 default_json_filename = f"scan_{target.replace('.', '_').replace('/', '_')}.json"
-                if click.confirm(f"\n{Fore.CYAN}Save results to {default_json_filename}?{Style.RESET_ALL}", default=False):
+                if click.confirm(f"\nSave results to {default_json_filename}?", default=False):
                     scanner.export_json(default_json_filename)
     else:
         if not output_json:
-            click.echo(f"{Fore.RED}[!] Scan failed{Style.RESET_ALL}")
+            error("Scan failed")
             if scanner.scan_errors:
-                click.echo(f"{Fore.RED}[!] Errors: {'; '.join(scanner.scan_errors)}{Style.RESET_ALL}")
+                error(f"Errors: {'; '.join(scanner.scan_errors)}")
         else:
             error_dict = {
                 "error": "Scan failed",
@@ -130,10 +128,10 @@ def scan(target, aggressive, fast, timeout, output_json, json_file, require_conf
 def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_save):
     """Analyze saved Nmap scan or Windows Event Log JSON via an LLM (--llm gemini|ollama)."""
     kind_label = "event log" if kind == "events" else "scan"
-    click.echo(f"{Fore.CYAN}[*] Analyzing {kind_label} file: {input_file}{Style.RESET_ALL}")
+    info(f"Analyzing {kind_label} file: {input_file}")
     effective_llm = route_provider(llm_name, routing)
-    click.echo(f"{Fore.CYAN}[*] LLM provider: {effective_llm}{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}[*] Mode: {mode}{Style.RESET_ALL}")
+    info(f"LLM provider: {effective_llm}")
+    info(f"Mode: {mode}")
 
     try:
         provider = resolve_provider(effective_llm)
@@ -143,35 +141,37 @@ def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_sa
             resolved_input = input_file
             if is_raw_log_export(resolved_input):
                 resolved_input, _parsed_n = auto_parse_to_file(resolved_input)
-                click.echo(f"{Fore.YELLOW}[*] Auto-parsed raw event-log export -> {_parsed_n} events{Style.RESET_ALL}")
-            used_model, analysis = analyze_event_log_file(
-                input_file=resolved_input,
-                output_file=None if no_save else output_file,
-                preferred_model=model,
-                provider=provider,
-                mode=prompt_mode,
-            )
+                info(f"Auto-parsed raw event-log export -> {_parsed_n} events")
+            # Day 24: spinner while the LLM works (prompt_engine retry
+            # notices print above it through the same console).
+            with spinner(f"Generating event-log analysis via {effective_llm} (free providers can take 1-2 minutes)..."):
+                used_model, analysis = analyze_event_log_file(
+                    input_file=resolved_input,
+                    output_file=None if no_save else output_file,
+                    preferred_model=model,
+                    provider=provider,
+                    mode=prompt_mode,
+                )
         else:
-            used_model, analysis = analyze_scan_file(
-                input_file=input_file,
-                output_file=None if no_save else output_file,
-                preferred_model=model,
-                provider=provider,
-                mode=prompt_mode,
-            )
+            with spinner(f"Generating scan analysis via {effective_llm} (free providers can take 1-2 minutes)..."):
+                used_model, analysis = analyze_scan_file(
+                    input_file=input_file,
+                    output_file=None if no_save else output_file,
+                    preferred_model=model,
+                    provider=provider,
+                    mode=prompt_mode,
+                )
     except Exception as exc:
-        click.echo(f"{Fore.RED}[!] Analysis failed: {exc}{Style.RESET_ALL}")
+        error(f"Analysis failed: {exc}")
         raise click.Abort()
 
-    click.echo(
-        f"{Fore.GREEN}[+] LLM analysis generated via {provider.value} "
-        f"with {used_model}{Style.RESET_ALL}"
-    )
+    success(f"LLM analysis generated via {provider.value} with {used_model}")
     if not no_save:
-        click.echo(f"{Fore.GREEN}[+] Saved analysis to {output_file}{Style.RESET_ALL}")
+        success(f"Saved analysis to {output_file}")
 
     click.echo()
-    click.echo(analysis)
+    # Day 24: render the Markdown analysis with Rich instead of a raw echo.
+    print_markdown(analysis)
 
 
 @main.command()
@@ -187,9 +187,9 @@ def parse(input_file, output_file, logs, host):
     from sentinelai.log_parser import parse_logs_to_file
     try:
         used_host, n = parse_logs_to_file(input_file, output_file, host_name=host)
-        click.echo(f"{Fore.GREEN}[+] Parsed {n} events (host={used_host}) -> {output_file}{Style.RESET_ALL}")
+        success(f"Parsed {n} events (host={used_host}) -> {output_file}")
     except Exception as exc:
-        click.echo(f"{Fore.RED}[!] Parse failed: {exc}{Style.RESET_ALL}")
+        error(f"Parse failed: {exc}")
         raise click.Abort()
 
 

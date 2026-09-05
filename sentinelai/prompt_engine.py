@@ -20,6 +20,10 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+# Day 24: retry notices go through the shared Rich console so they render
+# cleanly above the CLI spinner instead of interleaving raw prints.
+from sentinelai.ui import info as ui_info
+
 
 DEFAULT_SCAN_INPUT_FILE = Path("scan_results.json")
 DEFAULT_ANALYSIS_OUTPUT_FILE = Path("day9_nmap_llm_analysis.md")
@@ -645,7 +649,7 @@ def generate_nmap_analysis(
                 )
                 if attempt < retries and is_retryable:
                     backoff = 5 * (2 ** attempt)
-                    print(f"[*] Retrying {model} in {backoff}s after: {exc}")
+                    ui_info(f"Retrying {model} in {backoff}s after: {exc}")
                     time.sleep(backoff)
 
     raise RuntimeError("All Gemini model attempts failed:\n" + "\n".join(errors))
@@ -949,7 +953,7 @@ def _call_gemini(
                 )
                 if attempt < retries and is_retryable:
                     backoff = 5 * (2 ** attempt)
-                    print(f"[*] Retrying {model} in {backoff}s after: {exc}")
+                    ui_info(f"Retrying {model} in {backoff}s after: {exc}")
                     time.sleep(backoff)
 
     raise RuntimeError(
@@ -1063,7 +1067,7 @@ def _call_ollama(
                 errors.append(reason)
                 if attempt < retries:
                     backoff = 5 * (2 ** attempt)
-                    print(f"[*] Retrying Ollama {model} in {backoff}s after: {exc}")
+                    ui_info(f"Retrying Ollama {model} in {backoff}s after: {exc}")
                     time.sleep(backoff)
 
     raise RuntimeError("All Ollama model attempts failed:\n" + "\n".join(errors))

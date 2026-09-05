@@ -1,6 +1,6 @@
 import click
-from colorama import Fore, Style, init
 
+from sentinelai.ui import error, info, print_markdown, spinner, success
 from sentinelai.prompt_engine import (
     PromptMode,
     analyze_event_log_file,
@@ -9,8 +9,6 @@ from sentinelai.prompt_engine import (
 )
 from sentinelai.routing import auto_parse_to_file, is_raw_log_export, route_provider
 
-
-init(autoreset=True)
 
 # Free providers the team actually uses right now; others are accepted by the
 # switcher but fail with a friendly "paid/pending" message (Day 13).
@@ -32,10 +30,10 @@ def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_sa
     # sentinelai/cli.py's analyze (same --routing / --model / --no-save /
     # raw-export auto-parse) so both CLIs produce identical results.
     kind_label = "event log" if kind == "events" else "scan"
-    click.echo(f"{Fore.CYAN}[*] Analyzing {kind_label} file: {input_file}{Style.RESET_ALL}")
+    info(f"Analyzing {kind_label} file: {input_file}")
     effective_llm = route_provider(llm_name, routing)
-    click.echo(f"{Fore.CYAN}[*] LLM provider: {effective_llm}{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}[*] Mode: {mode}{Style.RESET_ALL}")
+    info(f"LLM provider: {effective_llm}")
+    info(f"Mode: {mode}")
 
     try:
         provider = resolve_provider(effective_llm)
@@ -45,32 +43,34 @@ def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_sa
             resolved_input = input_file
             if is_raw_log_export(resolved_input):
                 resolved_input, _parsed_n = auto_parse_to_file(resolved_input)
-                click.echo(f"{Fore.YELLOW}[*] Auto-parsed raw event-log export -> {_parsed_n} events{Style.RESET_ALL}")
-            used_model, analysis = analyze_event_log_file(
-                input_file=resolved_input,
-                output_file=None if no_save else output_file,
-                preferred_model=model,
-                provider=provider,
-                mode=prompt_mode,
-            )
+                info(f"Auto-parsed raw event-log export -> {_parsed_n} events")
+            # Day 24: spinner while the LLM works (prompt_engine retry
+            # notices print above it through the same console).
+            with spinner(f"Generating event-log analysis via {effective_llm} (free providers can take 1-2 minutes)..."):
+                used_model, analysis = analyze_event_log_file(
+                    input_file=resolved_input,
+                    output_file=None if no_save else output_file,
+                    preferred_model=model,
+                    provider=provider,
+                    mode=prompt_mode,
+                )
         else:
-            used_model, analysis = analyze_scan_file(
-                input_file=input_file,
-                output_file=None if no_save else output_file,
-                preferred_model=model,
-                provider=provider,
-                mode=prompt_mode,
-            )
+            with spinner(f"Generating scan analysis via {effective_llm} (free providers can take 1-2 minutes)..."):
+                used_model, analysis = analyze_scan_file(
+                    input_file=input_file,
+                    output_file=None if no_save else output_file,
+                    preferred_model=model,
+                    provider=provider,
+                    mode=prompt_mode,
+                )
     except Exception as exc:
-        click.echo(f"{Fore.RED}[!] Analysis failed: {exc}{Style.RESET_ALL}")
+        error(f"Analysis failed: {exc}")
         raise click.Abort()
 
-    click.echo(
-        f"{Fore.GREEN}[+] LLM analysis generated via {provider.value} "
-        f"with {used_model}{Style.RESET_ALL}"
-    )
+    success(f"LLM analysis generated via {provider.value} with {used_model}")
     if not no_save:
-        click.echo(f"{Fore.GREEN}[+] Saved analysis to {output_file}{Style.RESET_ALL}")
+        success(f"Saved analysis to {output_file}")
 
     click.echo()
-    click.echo(analysis)
+    # Day 24: render the Markdown analysis with Rich instead of a raw echo.
+    print_markdown(analysis)

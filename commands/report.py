@@ -2,9 +2,8 @@ import click
 import json
 import os
 from datetime import datetime
-from colorama import Fore, Style, init
 
-init(autoreset=True)
+from sentinelai.ui import error, info, success
 
 @click.command()
 @click.option("--input", "-i", required=False, help="Input JSON scan file")
@@ -17,21 +16,21 @@ def report(input, output, format):
     if not input:
         json_files = [f for f in os.listdir(".") if f.startswith("scan_") and f.endswith(".json")]
         if not json_files:
-            click.echo(f"{Fore.RED}[!] No scan JSON files found. Run 'sentinelai scan --target <IP>' first.{Style.RESET_ALL}")
+            error("No scan JSON files found. Run 'sentinelai scan --target <IP>' first.")
             return
         input = sorted(json_files)[-1]  # Get most recent
-        click.echo(f"{Fore.CYAN}[*] Using most recent scan file: {input}{Style.RESET_ALL}")
+        info(f"Using most recent scan file: {input}")
     
     # Load scan data
     try:
         with open(input, 'r') as f:
             scan_data = json.load(f)
-        click.echo(f"{Fore.GREEN}[+] Loaded scan data from {input}{Style.RESET_ALL}")
+        success(f"Loaded scan data from {input}")
     except FileNotFoundError:
-        click.echo(f"{Fore.RED}[!] File not found: {input}{Style.RESET_ALL}")
+        error(f"File not found: {input}")
         return
     except json.JSONDecodeError:
-        click.echo(f"{Fore.RED}[!] Invalid JSON file: {input}{Style.RESET_ALL}")
+        error(f"Invalid JSON file: {input}")
         return
     
     # Generate report based on format
@@ -42,7 +41,7 @@ def report(input, output, format):
     elif format == "csv":
         _generate_csv_report(scan_data, output)
     
-    click.echo(f"{Fore.GREEN}[+] Report generated successfully!{Style.RESET_ALL}")
+    success("Report generated successfully!")
 
 
 def _generate_text_report(scan_data, output_base):
@@ -84,7 +83,7 @@ def _generate_text_report(scan_data, output_base):
         f.write("=" * 70 + "\n")
         f.write("End of Report\n")
     
-    click.echo(f"  Saved to: {filename}")
+    success(f"Saved report to {filename}")
 
 
 def _generate_json_report(scan_data, output_base):
@@ -108,7 +107,7 @@ def _generate_json_report(scan_data, output_base):
     with open(filename, 'w') as f:
         json.dump(report, f, indent=2)
     
-    click.echo(f"  Saved to: {filename}")
+    success(f"Saved report to {filename}")
 
 
 def _generate_csv_report(scan_data, output_base):
@@ -126,4 +125,4 @@ def _generate_csv_report(scan_data, output_base):
                 for port in ports:
                     f.write(f'{ip},{status},{proto},{port["port"]},{port["state"]},{port["name"]},{port.get("product", "")},{port.get("version", "")}\n')
     
-    click.echo(f"  Saved to: {filename}")
+    success(f"Saved report to {filename}")
