@@ -239,7 +239,7 @@ def parse_logs(input_path: str, host_name: Optional[str] = None) -> Dict[str, An
         raise FileNotFoundError(f"Input log export not found: {input_path}")
     if p.suffix.lower() == ".evtx":
         return _parse_evtx(str(p))
-    text = p.read_text(encoding="utf-8", errors="replace")
+    text = p.read_text(encoding="utf-8-sig", errors="replace")
     return parse_logs_csv_text(text, host_name=host_name)
 
 

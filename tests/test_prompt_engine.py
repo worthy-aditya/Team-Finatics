@@ -229,7 +229,9 @@ def test_default_mode_is_standard():
 
 def test_default_models_for_provider_gemini():
     models = default_models_for_provider(LLMProvider.GEMINI)
-    assert "gemini-2.0-flash" in models
+    # Day 23 review fix: the retired "gemini-2.0-flash" must not be first.
+    assert "gemini-flash-latest" in models
+    assert "gemini-2.0-flash" not in models
     assert DEFAULT_GEMINI_MODELS[-1] in models
 
 
@@ -537,6 +539,203 @@ def test_load_event_log_data_missing_file():
         pe.load_event_log_data("does_not_exist_events_xyz.json")
 
 
+def test_load_event_log_data_handles_utf8_bom():
+    """Day 23: Windows writers often add a UTF-8 BOM; loaders must accept it."""
+    import tempfile
+
+    import sentinelai.prompt_engine as pe
+
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "events.json"
+        p.write_bytes(b"\xef\xbb\xbf" + json.dumps(SAMPLE_EVENTS).encode("utf-8"))
+        data = pe.load_event_log_data(str(p))
+        assert data["count"] == SAMPLE_EVENTS["count"]
+        assert data["events"][0]["event_id"] == SAMPLE_EVENTS["events"][0]["event_id"]
+
+
+# ---------------------------------------------------------------------------
+# Day 23 (Week 4): LLM review fixes — error handling + prompt edge cases
+# ---------------------------------------------------------------------------
+
+def test_build_event_log_prompt_rejects_bad_schema():
+    """Malformed event-log input fails fast with a clear message (Day 23)."""
+    with pytest.raises(ValueError, match="events"):
+        build_event_log_prompt({"foo": 1})
+    with pytest.raises(ValueError, match="events"):
+        build_event_log_prompt([1, 2, 3])
+    with pytest.raises(ValueError, match="events"):
+        build_event_log_prompt("raw string")
+
+
+def _patch_gemini_env_and_guards():
+    """Disable .env/network/IPv4 helpers and set a fake API key for _call_gemini."""
+    import sentinelai.prompt_engine as pe
+
+    saved_key = os.environ.pop("GEMINI_API_KEY", None)
+    saved_model_env = os.environ.pop("GEMINI_MODEL", None)
+    saved_dotenv = pe.load_dotenv
+    saved_net = pe.check_gemini_network
+    saved_ipv4 = pe.force_ipv4_resolution
+    os.environ["GEMINI_API_KEY"] = "test-key"
+    pe.load_dotenv = lambda *a, **k: False
+    pe.check_gemini_network = lambda: None
+    pe.force_ipv4_resolution = lambda: None
+
+    def _restore():
+        pe.load_dotenv = saved_dotenv
+        pe.check_gemini_network = saved_net
+        pe.force_ipv4_resolution = saved_ipv4
+        if saved_key is None:
+            os.environ.pop("GEMINI_API_KEY", None)
+        else:
+            os.environ["GEMINI_API_KEY"] = saved_key
+        if saved_model_env is None:
+            os.environ.pop("GEMINI_MODEL", None)
+        else:
+            os.environ["GEMINI_MODEL"] = saved_model_env
+
+    return _restore
+
+
+def test_call_gemini_prefers_requested_model():
+    """--model / preferred_model is tried FIRST on the Gemini path (Day 23)."""
+    import sentinelai.prompt_engine as pe
+
+    class _Resp:
+        text = "## 1. Plain-English Summary\nok"
+        usage_metadata = None
+
+    called = []
+
+    def _handler(model):
+        called.append(model)
+        return _Resp()
+
+    class _Models:
+        def generate_content(self, model, contents, config):
+            return _handler(model)
+
+    class _Client:
+        def __init__(self, **kwargs):
+            self.models = _Models()
+
+    restore = _patch_gemini_env_and_guards()
+    saved_genai = pe.genai
+    try:
+        pe.genai = type("FakeGenai", (), {"Client": _Client})()
+        model, text, usage = pe._call_gemini(prompt="p", preferred_model="cmodel")
+        assert called[0] == "cmodel"     # preferred tried first
+        assert model == "cmodel"
+        assert text == _Resp.text
+    finally:
+        pe.genai = saved_genai
+        restore()
+
+
+def test_call_gemini_skips_empty_response():
+    """A blocked/empty Gemini response is skipped in favor of the next model."""
+    import sentinelai.prompt_engine as pe
+
+    class _Resp:
+        def __init__(self, text):
+            self.text = text
+            self.usage_metadata = None
+
+    call_log = []
+
+    def _handler(model):
+        call_log.append(model)
+        # First candidate answers with an EMPTY text -> skipped.
+        if len(call_log) == 1:
+            return _Resp("")
+        return _Resp("real-analysis")
+
+    class _Models:
+        def generate_content(self, model, contents, config):
+            return _handler(model)
+
+    class _Client:
+        def __init__(self, **kwargs):
+            self.models = _Models()
+
+    restore = _patch_gemini_env_and_guards()
+    saved_genai = pe.genai
+    try:
+        pe.genai = type("FakeGenai", (), {"Client": _Client})()
+        model, text, usage = pe._call_gemini(prompt="p", retries=0)
+        # Empty response on the first candidate -> advanced to the second.
+        assert len(call_log) == 2
+        assert call_log[0] != call_log[1]
+        assert model == call_log[1]
+        assert text == "real-analysis"
+    finally:
+        pe.genai = saved_genai
+        restore()
+
+
+def test_call_gemini_all_empty_raises():
+    """If every candidate returns empty text, fail with the aggregated error."""
+    import sentinelai.prompt_engine as pe
+
+    class _Resp:
+        text = ""
+        usage_metadata = None
+
+    class _Models:
+        def generate_content(self, model, contents, config):
+            return _Resp()
+
+    class _Client:
+        def __init__(self, **kwargs):
+            self.models = _Models()
+
+    restore = _patch_gemini_env_and_guards()
+    saved_genai = pe.genai
+    try:
+        pe.genai = type("FakeGenai", (), {"Client": _Client})()
+        with pytest.raises(RuntimeError, match="All Gemini model attempts failed"):
+            pe._call_gemini(prompt="p", retries=0)
+    finally:
+        pe.genai = saved_genai
+        restore()
+
+
+def test_call_ollama_non_json_response_clean_error():
+    """A non-JSON Ollama response becomes a clean message, not a traceback."""
+    import sentinelai.prompt_engine as pe
+
+    class _BadJsonResp:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            raise ValueError("Expecting value: line 1 column 1")
+
+    class _FakeRequests:
+        def get(self, url, **k):
+            class _Tags:
+                status_code = 200
+
+                def raise_for_status(self):
+                    pass
+
+                def json(self):
+                    return {"models": [{"name": "gemma4:latest"}]}
+
+            return _Tags()
+
+        def post(self, url, json=None, **k):
+            return _BadJsonResp()
+
+    saved = pe.requests
+    try:
+        pe.requests = _FakeRequests()
+        with pytest.raises(RuntimeError, match="non-JSON response"):
+            pe._call_ollama(prompt="p", retries=0)
+    finally:
+        pe.requests = saved
 if __name__ == "__main__":
     # Offline execution without pytest: run the pure-function checks.
     test_build_prompt_has_expected_sections(PromptMode.STANDARD, [
@@ -578,4 +777,10 @@ if __name__ == "__main__":
     test_build_event_log_prompt_remediation_sections()
     test_analyze_event_log_data_via_ollama()
     test_load_event_log_data_missing_file()
+    test_load_event_log_data_handles_utf8_bom()
+    test_build_event_log_prompt_rejects_bad_schema()
+    test_call_gemini_prefers_requested_model()
+    test_call_gemini_skips_empty_response()
+    test_call_gemini_all_empty_raises()
+    test_call_ollama_non_json_response_clean_error()
     print("ALL prompt_engine TESTS PASSED (offline, pure functions)")

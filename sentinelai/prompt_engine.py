@@ -127,7 +127,10 @@ class ScanAnalysisResult:
 
 
 DEFAULT_MODEL_BY_PROVIDER: dict = {
-    LLMProvider.GEMINI: "gemini-2.0-flash",
+    # Day 23 review fix: "gemini-2.0-flash" was retired by Google (404), so
+    # every Gemini analysis wasted its first attempt. Use the stable alias;
+    # the rest of the chain is DEFAULT_GEMINI_MODELS (GEMINI_MODEL env wins).
+    LLMProvider.GEMINI: "gemini-flash-latest",
     LLMProvider.OLLAMA: "llama3",
 }
 
@@ -480,6 +483,18 @@ def build_event_log_prompt(
     # Compact separators: the JSON payload is reference context, not the
     # analysis — indenting it costs several hundred tokens of context that
     # otherwise limit how long the generated analysis can be.
+    # Day 23 review fix: fail fast and clearly when the input is not the
+    # event-log schema instead of silently prompting with a malformed payload.
+    if not isinstance(event_log_data, dict) or not isinstance(
+        event_log_data.get("events"), list
+    ):
+        raise ValueError(
+            "Expected Windows event-log schema JSON (an object with an 'events' "
+            "list), e.g. from `sentinelai parse --logs`, `sentinelai logs -o "
+            "events.json`, or day15_sample_events.json. Got: "
+            f"{type(event_log_data).__name__}."
+        )
+
     compact_json = json.dumps(event_log_data, separators=(",", ":"))
     if mode is PromptMode.STANDARD:
         return EVENT_LOG_ANALYSIS_PROMPT.format(event_log_data=compact_json)
@@ -503,7 +518,7 @@ def load_scan_data(path: PathLike = DEFAULT_SCAN_INPUT_FILE) -> dict:
     if not scan_path.exists():
         raise FileNotFoundError(f"Missing scan input file: {scan_path}")
 
-    with scan_path.open("r", encoding="utf-8") as f:
+    with scan_path.open("r", encoding="utf-8-sig") as f:
         return json.load(f)
 
 
@@ -513,7 +528,9 @@ def load_event_log_data(path: PathLike = DEFAULT_EVENT_LOG_INPUT_FILE) -> dict:
     if not event_path.exists():
         raise FileNotFoundError(f"Missing event log input file: {event_path}")
 
-    with event_path.open("r", encoding="utf-8") as f:
+    # Day 23: utf-8-sig transparently handles Windows writers that prepend a
+    # BOM (Out-File, Notepad, Event Viewer exports) -> no hard failure.
+    with event_path.open("r", encoding="utf-8-sig") as f:
         return json.load(f)
 
 
@@ -729,7 +746,7 @@ def analyze_scan_data(
     else:
         raise NotImplementedError(
             f"Provider '{provider.value}' integration is pending. "
-            "Gemini and (soon) Ollama are supported."
+            "Gemini and Ollama are supported."
         )
 
     return ScanAnalysisResult(
@@ -887,11 +904,11 @@ def _call_gemini(
 
     errors: list = []
 
-    for model in default_models_for_provider(LLMProvider.GEMINI):
-        if preferred_model and model != preferred_model:
-            # still allow preferred to go first via _model_candidates semantics,
-            # but here we rely on default_models_for_provider ordering.
-            pass
+    # Day 23 review fix: honor --model / preferred_model. Previously this
+    # iterated default_models_for_provider() and ignored preferred_model, so
+    # the preferred model was never tried first (and the retired
+    # gemini-2.0-flash was tried before the live fallback chain).
+    for model in _model_candidates(preferred_model):
         for attempt in range(retries + 1):
             try:
                 response = client.models.generate_content(
@@ -901,15 +918,26 @@ def _call_gemini(
                         safety_settings=safety_settings,
                     ),
                 )
+                usage_meta = getattr(response, "usage_metadata", None)
                 usage = {
-                    "candidates": getattr(response.usage_metadata, "candidates", None)
-                    if response.usage_metadata
-                    else None,
-                    "tokens": getattr(response.usage_metadata, "total_token_count", None)
-                    if response.usage_metadata
-                    else None,
+                    "candidates": getattr(usage_meta, "candidates", None),
+                    "tokens": getattr(usage_meta, "total_token_count", None),
                 }
-                return model, response.text, usage
+                try:
+                    text = response.text
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"{model}: response had no readable text ({exc})"
+                    ) from exc
+                if not (text or "").strip():
+                    # Day 23 review fix: never save an empty Markdown report.
+                    # Raised inside the retry loop so it is treated as a
+                    # non-retryable error and the next model candidate is tried.
+                    raise RuntimeError(
+                        f"{model}: Gemini returned an empty response "
+                        "(blocked or no generated content)."
+                    )
+                return model, text, usage
             except Exception as exc:
                 status = getattr(exc, "code", None) or getattr(
                     exc, "status_code", None
@@ -1014,7 +1042,16 @@ def _call_ollama(
                     errors.append(f"{model}: not found on Ollama server (404)")
                     break
                 resp.raise_for_status()
-                data = resp.json()
+                try:
+                    data = resp.json()
+                except ValueError as exc:
+                    # Day 23 review fix: Ollama always returns JSON; a proxy or
+                    # error page would otherwise raise a confusing traceback.
+                    # Treat the candidate as failed and move on.
+                    errors.append(
+                        f"{model}: Ollama returned a non-JSON response ({exc})"
+                    )
+                    break
                 usage = {
                     "prompt_tokens": data.get("prompt_eval_count"),
                     "response_tokens": data.get("eval_count"),
