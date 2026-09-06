@@ -418,7 +418,7 @@ def test_resolve_provider_free_paths():
 def test_resolve_provider_paid_pending():
     """openai/claude are accepted by the switcher but fail with guidance."""
     for name in ("openai", "claude"):
-        with pytest.raises(RuntimeError, match="not wired up yet.*free providers", ):
+        with pytest.raises(RuntimeError, match=r"(?i)not wired up yet.*free providers"):
             pe.resolve_provider(name)
 
 

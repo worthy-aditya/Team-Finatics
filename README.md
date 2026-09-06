@@ -162,6 +162,39 @@ python sentinelai.py                                                            
 
 ---
 
+---
+
+## Team modules — framework mapping, CVE lookup & reports
+
+Alongside the CLI pipeline, the repo includes the teammates' standalone modules
+(full docs: [USAGE.md](USAGE.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [CONTRIBUTING.md](CONTRIBUTING.md)):
+
+| Module | What it does |
+|---|---|
+| `owasp_mapper.py` / `mitre_mapper.py` / `framework_mapper.py` | Map a keyword (`"sql injection"`, `"phishing"`) to **OWASP Top 10:2025** and **MITRE ATT&CK** (Enterprise/Mobile/ICS) using the bundled STIX datasets in `data/` |
+| `nmap_parser.py` + `nmap_report_pipeline.py` | Parse raw Nmap output → mapped findings → AI analysis → report (`run_nmap_to_report(...)`) |
+| `event_log_parser.py` + `event_log_report_pipeline.py` | Same for Windows event logs, incl. pattern inference such as repeated failed logons → brute force (`run_event_log_to_report(...)`) |
+| `remediation_mapper.py` | Concrete, actionable fix steps for any OWASP/MITRE finding (`get_remediation_for_findings(...)`) |
+| `cve/` | CVE lookup with severity scoring + Nmap-service matching (NVD API) |
+| `report_generator.py` | Multi-format report generation (text / JSON / Markdown) |
+
+```python
+# one call: Nmap output -> mapping -> AI analysis -> report
+from nmap_report_pipeline import run_nmap_to_report
+result = run_nmap_to_report(open("scan_output.txt").read(), report_format="markdown")
+print(result["report"])
+
+# remediation steps for any finding
+from remediation_mapper import get_remediation_for_findings
+remediations = get_remediation_for_findings(result["findings"])
+```
+
+These are also covered by pytest — `python -m pytest -v` runs the 56+ mapping,
+pipeline and integration tests (verified on Windows and Linux by the team).
+
+Data sources: [OWASP Top 10:2025](https://owasp.org/Top10/2025/) · [MITRE ATT&CK (cti repo)](https://github.com/mitre/cti)
+
+
 ## Environment variables
 
 All optional except `GEMINI_API_KEY` (only needed for `--llm gemini`). See `.env.example`.
