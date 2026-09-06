@@ -90,6 +90,7 @@ The catalog lives in `sentinelai/event_logs.py` (`CRITICAL_SECURITY_EVENTS`) wit
 
 | Failure | Fallback |
 |---|---|
+| **Gemini rate-limits (429) mid-demo** | **Primary: narrate over the committed analysis artifact** (`day9_nmap_llm_analysis.md` — zero time cost); or wait ~60 s (per-minute free-tier quota resets) and rerun — the CLI now prints this exact hint on failure |
 | Ollama cold/slow | It was warmed in the checklist; worst case the spinner shows progress — narrate the routing story while it loads |
 | Ollama down | `--llm gemini` (needs `GEMINI_API_KEY` in `.env`), or narrate over the committed analysis artifacts |
 | Nmap blocked (Wi-Fi captive portal etc.) | Use the committed fixture: `python sentinelai.py analyze -i scan_results.json --kind scan --llm ollama` |

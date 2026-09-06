@@ -50,6 +50,17 @@ GEMINI_REQUEST_TIMEOUT_MS = 300_000
 # Transient API errors worth retrying with backoff.
 RETRYABLE_STATUS = {429, 500, 503}
 
+
+def _gemini_rate_limit_hint(errors) -> str:
+    """Append an actionable hint when the failure pattern is free-tier limiting."""
+    joined = "\n".join(str(e) for e in errors)
+    if "429" in joined or "RESOURCE_EXHAUSTED" in joined or "quota" in joined.lower():
+        return (
+            "\nHint: this looks like Gemini free-tier rate limiting (429/quota). "
+            "Wait ~60s and retry, or switch providers with --llm ollama."
+        )
+    return ""
+
 GEMINI_API_HOST = "generativelanguage.googleapis.com"
 
 # Ollama (Day 12): local server, no API key required. Override the host via
@@ -652,7 +663,10 @@ def generate_nmap_analysis(
                     ui_info(f"Retrying {model} in {backoff}s after: {exc}")
                     time.sleep(backoff)
 
-    raise RuntimeError("All Gemini model attempts failed:\n" + "\n".join(errors))
+    raise RuntimeError(
+        "All Gemini model attempts failed:\n" + "\n".join(errors)
+        + _gemini_rate_limit_hint(errors)
+    )
 
 
 def analyze_scan_file(
@@ -958,6 +972,7 @@ def _call_gemini(
 
     raise RuntimeError(
         "All Gemini model attempts failed:\n" + "\n".join(errors)
+        + _gemini_rate_limit_hint(errors)
     )
 
 
