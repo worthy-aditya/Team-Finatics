@@ -130,3 +130,8 @@ webencodings==0.5.1
 websocket-client==1.9.0
 websockets==16.1.1
 Werkzeug==3.1.6
+
+# Native Windows Security log reading (`logs` without --sample). Windows only;
+# not needed for --sample mode or any other command.
+pywin32; sys_platform == "win32"
+
