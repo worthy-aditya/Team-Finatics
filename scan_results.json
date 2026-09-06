@@ -1,0 +1,38 @@
+{
+  "target": "127.0.0.1",
+  "scan_status": {},
+  "hosts": [
+    {
+      "ip": "127.0.0.1",
+      "status": "up",
+      "protocols": {
+        "tcp": [
+          {
+            "port": 135,
+            "state": "open",
+            "name": "msrpc",
+            "product": "Microsoft Windows RPC",
+            "version": "",
+            "extrainfo": ""
+          },
+          {
+            "port": 137,
+            "state": "filtered",
+            "name": "netbios-ns",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          {
+            "port": 445,
+            "state": "open",
+            "name": "microsoft-ds",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          }
+        ]
+      }
+    }
+  ]
+}

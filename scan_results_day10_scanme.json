@@ -1,0 +1,77 @@
+{
+  "metadata": {
+    "target": "scanme.nmap.org",
+    "scan_timestamp": "2026-08-26T11:53:03.207241",
+    "scan_type": "nmap_security_scan"
+  },
+  "summary": {
+    "total_hosts_scanned": 1,
+    "total_hosts_up": 1,
+    "total_ports_scanned": 2,
+    "total_open_ports": 2,
+    "total_closed_ports": 0,
+    "total_filtered_ports": 0
+  },
+  "hosts": [
+    {
+      "address": "45.33.32.156",
+      "status": "up",
+      "hostnames": [
+        {
+          "name": "scanme.nmap.org",
+          "type": "user"
+        },
+        {
+          "name": "scanme.nmap.org",
+          "type": "PTR"
+        }
+      ],
+      "ports": [
+        {
+          "port": 22,
+          "protocol": "tcp",
+          "state": "open",
+          "service": {
+            "name": "ssh",
+            "product": "OpenSSH",
+            "version": "6.6.1p1 Ubuntu 2ubuntu2.13",
+            "extrainfo": "Ubuntu Linux; protocol 2.0"
+          },
+          "service_string": "ssh (OpenSSH 6.6.1p1 Ubuntu 2ubuntu2.13) - Ubuntu Linux; protocol 2.0"
+        },
+        {
+          "port": 80,
+          "protocol": "tcp",
+          "state": "open",
+          "service": {
+            "name": "http",
+            "product": "Apache httpd",
+            "version": "2.4.7",
+            "extrainfo": "(Ubuntu)"
+          },
+          "service_string": "http (Apache httpd 2.4.7) - (Ubuntu)"
+        }
+      ],
+      "services": {
+        "22/tcp": {
+          "state": "open",
+          "name": "ssh",
+          "full_info": "ssh (OpenSSH 6.6.1p1 Ubuntu 2ubuntu2.13) - Ubuntu Linux; protocol 2.0"
+        },
+        "80/tcp": {
+          "state": "open",
+          "name": "http",
+          "full_info": "http (Apache httpd 2.4.7) - (Ubuntu)"
+        }
+      },
+      "protocol_summary": {
+        "tcp": {
+          "open": 2,
+          "closed": 0,
+          "filtered": 0,
+          "total_scanned": 2
+        }
+      }
+    }
+  ]
+}

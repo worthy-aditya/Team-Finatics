@@ -1,0 +1,158 @@
+{
+  "metadata": {
+    "target": "127.0.0.1",
+    "scan_timestamp": "2026-08-26T11:51:15.109579",
+    "scan_type": "nmap_security_scan"
+  },
+  "summary": {
+    "total_hosts_scanned": 1,
+    "total_hosts_up": 1,
+    "total_ports_scanned": 7,
+    "total_open_ports": 2,
+    "total_closed_ports": 4,
+    "total_filtered_ports": 1
+  },
+  "hosts": [
+    {
+      "address": "127.0.0.1",
+      "status": "up",
+      "hostnames": [
+        {
+          "name": "localhost",
+          "type": "PTR"
+        }
+      ],
+      "ports": [
+        {
+          "port": 80,
+          "protocol": "tcp",
+          "state": "closed",
+          "service": {
+            "name": "http",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "http"
+        },
+        {
+          "port": 135,
+          "protocol": "tcp",
+          "state": "open",
+          "service": {
+            "name": "msrpc",
+            "product": "Microsoft Windows RPC",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "msrpc (Microsoft Windows RPC)"
+        },
+        {
+          "port": 137,
+          "protocol": "tcp",
+          "state": "filtered",
+          "service": {
+            "name": "netbios-ns",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "netbios-ns"
+        },
+        {
+          "port": 139,
+          "protocol": "tcp",
+          "state": "closed",
+          "service": {
+            "name": "netbios-ssn",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "netbios-ssn"
+        },
+        {
+          "port": 443,
+          "protocol": "tcp",
+          "state": "closed",
+          "service": {
+            "name": "https",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "https"
+        },
+        {
+          "port": 445,
+          "protocol": "tcp",
+          "state": "open",
+          "service": {
+            "name": "microsoft-ds",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "microsoft-ds"
+        },
+        {
+          "port": 3389,
+          "protocol": "tcp",
+          "state": "closed",
+          "service": {
+            "name": "ms-wbt-server",
+            "product": "",
+            "version": "",
+            "extrainfo": ""
+          },
+          "service_string": "ms-wbt-server"
+        }
+      ],
+      "services": {
+        "80/tcp": {
+          "state": "closed",
+          "name": "http",
+          "full_info": "http"
+        },
+        "135/tcp": {
+          "state": "open",
+          "name": "msrpc",
+          "full_info": "msrpc (Microsoft Windows RPC)"
+        },
+        "137/tcp": {
+          "state": "filtered",
+          "name": "netbios-ns",
+          "full_info": "netbios-ns"
+        },
+        "139/tcp": {
+          "state": "closed",
+          "name": "netbios-ssn",
+          "full_info": "netbios-ssn"
+        },
+        "443/tcp": {
+          "state": "closed",
+          "name": "https",
+          "full_info": "https"
+        },
+        "445/tcp": {
+          "state": "open",
+          "name": "microsoft-ds",
+          "full_info": "microsoft-ds"
+        },
+        "3389/tcp": {
+          "state": "closed",
+          "name": "ms-wbt-server",
+          "full_info": "ms-wbt-server"
+        }
+      },
+      "protocol_summary": {
+        "tcp": {
+          "open": 2,
+          "closed": 4,
+          "filtered": 1,
+          "total_scanned": 7
+        }
+      }
+    }
+  ]
+}
