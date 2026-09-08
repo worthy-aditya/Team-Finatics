@@ -66,6 +66,8 @@ REASON_FILE_NOT_FOUND = "file_not_found"
 REASON_NO_TOKEN = "no_token_found"
 REASON_MISMATCH = "token_mismatch"
 REASON_UNREACHABLE = "unreachable"
+# Added Day 34: operator never supplied a token, so the fetch never ran.
+REASON_NO_TOKEN_PROVIDED = "no_token_provided"
 
 
 class DomainVerificationError(ValueError):
