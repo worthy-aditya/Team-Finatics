@@ -11,8 +11,10 @@ from datetime import datetime
 
 from sentinelai.ui import error, info, success
 
-# Configure logging (INFO: DEBUG made nmap/python-nmap spam stdout)
-logging.basicConfig(level=logging.INFO)
+# Configure logging (WARNING+ only): INFO went to stderr and made PowerShell
+# render a false "NativeCommandError" block after every successful scan.
+# User-facing progress/status lines already go to stdout via sentinelai.ui.
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -298,8 +300,16 @@ class NmapScanner(Scanner):
         for host in self.parsed_results.get("hosts", []):
             summary.append(f"\nHost: {host['address']} ({host['status']})")
             
-            if host.get("hostnames"):
-                summary.append(f"  Hostnames: {', '.join(host['hostnames'])}")
+            # python-nmap returns hostnames as list of dicts
+            # (e.g. [{"name": "localhost", "type": "PTR"}]); normalize to
+            # plain strings so the summary renders for both shapes.
+            host_names = [
+                h.get("name", "") if isinstance(h, dict) else str(h)
+                for h in host.get("hostnames") or []
+            ]
+            host_names = [n for n in host_names if n]
+            if host_names:
+                summary.append(f"  Hostnames: {', '.join(host_names)}")
             
             # Protocol summary
             for proto, proto_stats in host.get("protocol_summary", {}).items():
