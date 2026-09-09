@@ -1,0 +1,62 @@
+{
+  "source": "zap-active-scan",
+  "target": "http://juice-shop.local",
+  "scan_policy": "Default Policy",
+  "scan_time": "2026-09-09T10:15:00",
+  "authorized": {
+    "consent": "attestation granted (typed sentence, Day 32 gate)",
+    "domain_verified": true,
+    "audit_log": "consent_audit_log.jsonl"
+  },
+  "count": 3,
+  "alerts": [
+    {
+      "plugin_id": 40018,
+      "name": "SQL Injection",
+      "risk": "High",
+      "confidence": "Medium",
+      "cwe_id": 89,
+      "url": "http://juice-shop.local/rest/products/search?q=1",
+      "method": "GET",
+      "param": "q",
+      "attack": "1' OR '1'='1",
+      "evidence": "The page response contained a database error string",
+      "description": "SQL injection may be possible on the search parameter: untrusted data is concatenated into a database query without parameterization.",
+      "solution": "Use parameterized queries / prepared statements and validate input server-side.",
+      "reference": "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html",
+      "tags": {"OWASP": "A03:2021 - Injection"}
+    },
+    {
+      "plugin_id": 10038,
+      "name": "Content Security Policy (CSP) Header Not Set",
+      "risk": "Medium",
+      "confidence": "High",
+      "cwe_id": 693,
+      "url": "http://juice-shop.local/",
+      "method": "GET",
+      "param": "",
+      "attack": "",
+      "evidence": "The response does not include a Content-Security-Policy header",
+      "description": "Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks, including Cross Site Scripting (XSS) and data injection attacks.",
+      "solution": "Configure a Content-Security-Policy header that restricts script and object sources.",
+      "reference": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy",
+      "tags": {"OWASP": "A05:2021 - Security Misconfiguration"}
+    },
+    {
+      "plugin_id": 10020,
+      "name": "X-Frame-Options Header Not Set",
+      "risk": "Low",
+      "confidence": "Medium",
+      "cwe_id": 1021,
+      "url": "http://juice-shop.local/login",
+      "method": "GET",
+      "param": "",
+      "attack": "",
+      "evidence": "No X-Frame-Options header was returned",
+      "description": "X-Frame-Options helps protect against clickjacking by controlling whether the page can be framed.",
+      "solution": "Add an X-Frame-Options: DENY header, or a CSP frame-ancestors directive.",
+      "reference": "https://owasp.org/www-community/controls/Clickjacking_Defense_Cheat_Sheet",
+      "tags": {"OWASP": "A05:2021 - Security Misconfiguration"}
+    }
+  ]
+}

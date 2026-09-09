@@ -36,6 +36,16 @@ DEFAULT_ANALYSIS_OUTPUT_FILE = Path("day9_nmap_llm_analysis.md")
 DEFAULT_EVENT_LOG_INPUT_FILE = Path("event_logs.json")
 DEFAULT_EVENT_LOG_ANALYSIS_OUTPUT_FILE = Path("day15_analysis_events.md")
 
+# Day 35 (Feature Sprint): active-scan (OWASP ZAP) findings artifacts. The
+# schema contract is: {"source", "target", "scan_policy", "scan_time",
+# "authorized": {...}, "count", "alerts": [...]} where each alert carries
+# plugin_id, name, risk, confidence, cwe_id, url, method, param, attack,
+# evidence, description, solution, reference, and tags (see
+# day35_sample_zap_findings.json; ZAP's JSON alert export maps onto this).
+# Only "alerts" is mandatory (an empty list is a valid clean-scan result).
+DEFAULT_ZAP_INPUT_FILE = Path("zap_findings.json")
+DEFAULT_ZAP_ANALYSIS_OUTPUT_FILE = Path("day36_analysis_zap.md")
+
 DEFAULT_GEMINI_MODELS = [
     "gemini-3.6-flash",
     "gemini-flash-latest",
@@ -450,6 +460,102 @@ and actionable.
 """
 
 
+# ---------------------------------------------------------------------------
+# Day 35 (Feature Sprint): active-scan (OWASP ZAP) findings prompt — v1
+# ---------------------------------------------------------------------------
+# Deliberately DISTINCT from the Nmap (Day 9/10) and Windows Event Log
+# (Day 15) templates: the persona is a WEB-APPLICATION analyst, findings
+# carry ZAP-specific fields (plugin_id, risk, confidence, param/attack/
+# evidence, CWE, OWASP tag), the evidence is the scanner's own request
+# evidence, and section 3 is a True-Positive Assessment (what the scanner
+# proved vs what needs human verification) instead of the network/attacker
+# sections. This template is only ever fed data from an AUTHORIZED active
+# test: the Day 31-34 two-layer gate (typed consent attestation +
+# .well-known domain verification) must have passed before the scan ran.
+ZAP_ANALYSIS_PROMPT = """
+You are a senior web-application security analyst assistant helping a student
+understand what an authorized active scan (OWASP ZAP) found on a web
+application. Your analysis must be strictly evidence-based: base every
+conclusion only on the alerts provided, and never claim a confirmed
+vulnerability unless ZAP reported it. Distinguish CONFIRMED from SUSPECTED
+using each alert's risk and confidence fields (a High-risk / Low-confidence
+alert is a strong candidate for a false positive).
+
+IMPORTANT CONTEXT: You are assisting with DEFENSIVE security education and
+hardening. The findings below come from an AUTHORIZED active test of the
+user's own lab application - the two-layer authorization (typed consent
+attestation plus a domain-verification token published at
+.well-known/sentinelai-verify.txt) was completed BEFORE the scan ran. Do NOT
+design new attack payloads, exploit chains, or escalation steps: the only
+request evidence you may reference is the attack/evidence text ZAP itself
+reported. All re-test guidance must be safe, read-only verification a defender
+can perform without crafting anything new.
+
+Below is structured OWASP ZAP active-scan output (JSON):
+
+{zap_findings}
+
+Produce a Markdown analysis with EXACTLY these sections, in this order:
+
+## 1. Plain-English Summary
+A short, beginner-friendly overview: which application/URLs were scanned, how
+many alerts were raised at each risk level (High/Medium/Low/Informational),
+what kind of web application the URLs suggest, and the overall picture in one
+or two sentences. If there are no alerts, say the scan came back clean and
+state what that does and does not guarantee.
+
+## 2. Findings (ranked by risk)
+For EACH distinct alert, provide a structured finding:
+- **Finding #N - <alert name> (ZAP plugin <plugin_id>)**
+  - Severity: <risk exactly as reported> (score out of 10), Confidence:
+    <confidence exactly as reported>
+  - Affected: <method> <url> - parameter <param> (or "not parameter-based")
+  - Evidence from scan: quote the alert's attack/evidence strings exactly; if
+    the alert has none, say what triggered it (e.g., a missing header)
+  - Why it matters: plain-English explanation tied to CWE <cwe_id> when present
+  - OWASP Top 10: use the alert's OWASP tag when present; otherwise propose the
+    closest OWASP 2021 category and mark it "(proposed)"
+Rank by risk first, then confidence. If the same alert fires on many URLs,
+deduplicate into ONE finding and list the affected URLs. Informational-level
+alerts may be summarized briefly at the end without full ranking.
+
+## 3. True-Positive Assessment
+- Separate near-certain true positives (explicit attack/evidence strings, e.g.
+  reflected output or an injected-string database error) from likely false
+  positives (configuration/policy alerts with Low confidence, or checks a
+  proxy, framework, or hosting layer may already handle).
+- For each of the top findings, give ONE safe, read-only way for the defender
+  to verify it manually (open the page and observe, inspect response headers
+  in browser dev tools). Verification only - never build a new payload.
+- State plainly what the active scan PROVES (ZAP sent request X and observed
+  behavior Y) and what it DOES NOT prove (business-logic flaws, authenticated
+  pages outside the scan, vulnerabilities with no ZAP rule, real-world impact).
+
+## 4. Recommended Next Steps
+Split into two numbered groups, each tied to the specific findings it addresses:
+### Immediate (verify & low-risk fixes)
+Safe verification steps plus fixes with no functional downside (add the missing
+security headers, set cookie flags, disable verbose error pages).
+### Fix (remediation)
+Concrete fixes anchored in each alert's own solution and reference fields
+(e.g., parameterized queries for injection, output encoding for XSS, a CSP
+policy). Reference standard guidance by name (OWASP Top 10, OWASP Cheat Sheet
+Series) only when the data supports it, and never invent URLs.
+
+## 5. Confidence & Limitations
+- What this analysis is based on (plugin IDs, risks, confidences, URLs).
+- What could degrade confidence: unauthenticated scanning, the named scan
+  policy's coverage, spider/JavaScript coverage gaps, time-boxed scanning.
+- What is NOT covered and who should verify it: business-logic flaws, APIs or
+  authenticated flows outside scope, vulnerable dependencies (use a software
+  composition analysis tool), and anything needing credentials.
+
+Do not fabricate alerts, plugin IDs, CWE numbers, or OWASP categories that the
+JSON does not support. Keep the tone educational but technically accurate;
+concise and actionable.
+"""
+
+
 def _select_prompt_template(mode: PromptMode) -> str:
     """Return the prompt template string for a given prompt mode."""
     if mode is PromptMode.BEGINNER:
@@ -521,6 +627,50 @@ def build_event_log_prompt(
         f"Event Log prompt mode '{mode.value}' is not built yet. "
         "The 'standard' and 'remediation' event-log variants are available; "
         "the 'beginner' variant arrives later in Week 3."
+    )
+
+
+def build_zap_prompt(
+    zap_findings: dict, mode: PromptMode = PromptMode.STANDARD
+) -> str:
+    """Build an active-scan (OWASP ZAP) findings analysis prompt (Day 35).
+
+    Formats structured ZAP alert JSON into the Day 35 prompt template.
+    Template v1 covers the STANDARD five-section web-app analysis only;
+    BEGINNER/REMEDIATION variants arrive on later Feature Sprint days and
+    raise a clear error here instead of silently reusing the scan/log
+    templates on ZAP data (same convention as build_event_log_prompt).
+
+    Args:
+        zap_findings: structured ZAP active-scan findings dict following the
+            contract in day35_sample_zap_findings.json:
+            {"source", "target", "scan_policy", "scan_time", "count",
+             "alerts": [{plugin_id, name, risk, confidence, cwe_id, url,
+             method, param, attack, evidence, description, solution,
+             reference, tags}, ...]}. Only the "alerts" list is mandatory
+             (an empty list is a valid clean-scan result).
+        mode: prompt template to use (v1: STANDARD only).
+    """
+    if not isinstance(zap_findings, dict) or not isinstance(
+        zap_findings.get("alerts"), list
+    ):
+        raise ValueError(
+            "Expected ZAP active-scan findings schema JSON (an object with an "
+            "'alerts' list), e.g. from a ZAP JSON export or "
+            "day35_sample_zap_findings.json. Got: "
+            f"{type(zap_findings).__name__}."
+        )
+
+    # Compact separators (Day 15 rationale): the JSON payload is reference
+    # context, not the analysis - indenting it costs context tokens that
+    # otherwise limit how long the generated analysis can be.
+    compact_json = json.dumps(zap_findings, separators=(",", ":"))
+    if mode is PromptMode.STANDARD:
+        return ZAP_ANALYSIS_PROMPT.format(zap_findings=compact_json)
+    raise ValueError(
+        f"ZAP prompt mode '{mode.value}' is not built yet. Template v1 "
+        "(Day 35) covers the 'standard' analysis only; beginner/remediation "
+        "variants arrive on later Feature Sprint days."
     )
 
 

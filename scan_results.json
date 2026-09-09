@@ -1,37 +1,89 @@
 {
-  "target": "127.0.0.1",
-  "scan_status": {},
+  "metadata": {
+    "target": "127.0.0.1",
+    "scan_timestamp": "2026-09-08T12:20:12.034873",
+    "scan_type": "nmap_security_scan"
+  },
+  "summary": {
+    "total_hosts_scanned": 1,
+    "total_hosts_up": 1,
+    "total_ports_scanned": 3,
+    "total_open_ports": 2,
+    "total_closed_ports": 0,
+    "total_filtered_ports": 1
+  },
   "hosts": [
     {
-      "ip": "127.0.0.1",
+      "address": "127.0.0.1",
       "status": "up",
-      "protocols": {
-        "tcp": [
-          {
-            "port": 135,
-            "state": "open",
+      "hostnames": [
+        {
+          "name": "localhost",
+          "type": "PTR"
+        }
+      ],
+      "ports": [
+        {
+          "port": 135,
+          "protocol": "tcp",
+          "state": "open",
+          "service": {
             "name": "msrpc",
             "product": "Microsoft Windows RPC",
             "version": "",
             "extrainfo": ""
           },
-          {
-            "port": 137,
-            "state": "filtered",
+          "service_string": "msrpc (Microsoft Windows RPC)"
+        },
+        {
+          "port": 137,
+          "protocol": "tcp",
+          "state": "filtered",
+          "service": {
             "name": "netbios-ns",
             "product": "",
             "version": "",
             "extrainfo": ""
           },
-          {
-            "port": 445,
-            "state": "open",
+          "service_string": "netbios-ns"
+        },
+        {
+          "port": 445,
+          "protocol": "tcp",
+          "state": "open",
+          "service": {
             "name": "microsoft-ds",
             "product": "",
             "version": "",
             "extrainfo": ""
-          }
-        ]
+          },
+          "service_string": "microsoft-ds"
+        }
+      ],
+      "services": {
+        "135/tcp": {
+          "state": "open",
+          "name": "msrpc",
+          "full_info": "msrpc (Microsoft Windows RPC)"
+        },
+        "137/tcp": {
+          "state": "filtered",
+          "name": "netbios-ns",
+          "full_info": "netbios-ns"
+        },
+        "445/tcp": {
+          "state": "open",
+          "name": "microsoft-ds",
+          "full_info": "microsoft-ds"
+        }
+      },
+      "protocol_summary": {
+        "tcp": {
+          "open": 2,
+          "closed": 0,
+          "filtered": 1,
+          "total_scanned": 3
+        }
       }
     }
   ]

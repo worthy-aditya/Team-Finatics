@@ -9,6 +9,7 @@ from sentinelai.ui import error, info, print_markdown, print_panel, spinner, ste
 from sentinelai.scanner import NmapScanner, Scanner
 from sentinelai.natural_cli import NaturalLanguageCLI
 from sentinelai.approval import ApprovalError, request_approval
+from sentinelai.active_gate import active_scan_host, authorize_active_testing
 from sentinelai.routing import auto_parse_to_file, is_raw_log_export, route_provider
 from sentinelai.logs_command import build_logs_command
 from commands.report import report as report_command
@@ -39,26 +40,51 @@ def main():
 @click.option("--json-file", type=str, default=None, help="Save JSON results to specified file")
 @click.option("--confirm", "require_confirmation", is_flag=True, help="Ask for approval before scanning")
 @click.option("--yes", "assume_yes", is_flag=True, help="Approve a confirmed operation non-interactively")
-def scan(target, aggressive, fast, timeout, output_json, json_file, require_confirmation, assume_yes):
+@click.option("--active", "active_test", is_flag=True, help="Active testing: block until consent attestation + domain verification pass")
+@click.option("--verify-token", "verify_token", default=None, help="Token published at .well-known/sentinelai-verify.txt (prompted if omitted)")
+def scan(target, aggressive, fast, timeout, output_json, json_file, require_confirmation, assume_yes, active_test, verify_token):
     """Run security scan on target"""
     
-    # Day 20 human-in-the-loop approval (reuses sentinelai.approval).
-    if require_confirmation:
-        try:
-            approved = request_approval(
-                "security scan",
-                target,
-                assume_yes=assume_yes,
+    # Day 34: --active blocks until BOTH authorization checks pass
+    # (consent attestation -> domain verification). Fail-closed everywhere.
+    if active_test:
+        if assume_yes:
+            raise click.ClickException(
+                "Active testing cannot be approved with --yes: you must type "
+                "the attestation sentence verbatim (Day 32 consent gate)."
             )
-        except ApprovalError as exc:
-            raise click.ClickException(str(exc)) from exc
-        if not approved:
-            click.echo("Scan cancelled: approval was not granted.")
-            return
+        if output_json or json_file:
+            raise click.ClickException(
+                "Active testing is interactive (consent attestation + domain "
+                "verification) and cannot be combined with --json / --json-file."
+            )
+        auth = authorize_active_testing(target, verify_token=verify_token)
+        if not auth.authorized:
+            error(f"Active testing blocked: {auth.blocked_reason}")
+            return None
+        success("Both authorization checks passed - active testing authorized")
+        scan_host = active_scan_host(target)
+        if scan_host != target:
+            info(f"Scan stage target: {scan_host}")
+    else:
+        scan_host = target
+        # Day 20 human-in-the-loop approval (reuses sentinelai.approval).
+        if require_confirmation:
+            try:
+                approved = request_approval(
+                    "security scan",
+                    target,
+                    assume_yes=assume_yes,
+                )
+            except ApprovalError as exc:
+                raise click.ClickException(str(exc)) from exc
+            if not approved:
+                click.echo("Scan cancelled: approval was not granted.")
+                return
 
     # Validate target format
-    if not Scanner.validate_target(target):
-        warn(f"Warning: Target '{target}' format may be invalid. Proceeding anyway...")
+    if not Scanner.validate_target(scan_host):
+        warn(f"Warning: Target '{scan_host}' format may be invalid. Proceeding anyway...")
     
     if not output_json:
         info(f"Scanning target: {target}")
@@ -84,7 +110,7 @@ def scan(target, aggressive, fast, timeout, output_json, json_file, require_conf
     # Day 24/25: quiet in machine mode (--json or --json-file) so stdout
     # stays JSON-pure; --json-file works without --json too.
     machine_mode = bool(output_json or json_file)
-    scanner = NmapScanner(target, quiet=machine_mode)
+    scanner = NmapScanner(scan_host, quiet=machine_mode)
 
     if scanner.scan(arguments=arguments):
         if machine_mode:
