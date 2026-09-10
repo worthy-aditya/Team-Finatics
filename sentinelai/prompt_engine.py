@@ -1028,6 +1028,139 @@ def analyze_event_log_file(
     return result.model, result.analysis
 
 
+# ---------------------------------------------------------------------------
+# Day 36 (Feature Sprint): ZAP active-scan findings -> unified LLM pipeline
+# ---------------------------------------------------------------------------
+def load_zap_findings(
+    path: PathLike = DEFAULT_ZAP_INPUT_FILE,
+) -> dict:
+    """Load a ZAP active-scan findings JSON file (Day 36).
+
+    BOM-aware (Day 23 lesson: Windows writers prepend a BOM), and fails with
+    an actionable message pointing at the Day 35 schema contract.
+    """
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"ZAP findings file not found: {path!r}. Run an authorized active "
+            "scan (scan --active) and export its alerts, or use the Day 35 "
+            "schema fixture day35_sample_zap_findings.json."
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Invalid JSON in ZAP findings file {path!r}: {exc}"
+        ) from exc
+    # Fail fast (Day 23 convention) instead of prompting with a bad payload.
+    if not isinstance(data, dict) or not isinstance(data.get("alerts"), list):
+        raise ValueError(
+            "Expected ZAP active-scan findings schema JSON (an object with an "
+            "'alerts' list), e.g. from a ZAP JSON export or "
+            "day35_sample_zap_findings.json. Got: "
+            f"{type(data).__name__}."
+        )
+    return data
+
+
+def analyze_zap_findings_data(
+    zap_findings: dict,
+    provider: LLMProvider = LLMProvider.GEMINI,
+    preferred_model: Optional[str] = None,
+    mode: PromptMode = PromptMode.STANDARD,
+    retries: int = 2,
+    timeout_ms: Optional[int] = None,
+    api_key: Optional[str] = None,
+) -> ScanAnalysisResult:
+    """Analyze ZAP active-scan findings with a pluggable provider (Day 36).
+
+    Mirrors analyze_scan_data() / analyze_event_log_data() for the Day 35
+    template, so gemini (cloud free tier) and ollama (local/private) work
+    identically for active-scan findings analysis.
+
+    Args:
+        zap_findings: structured ZAP findings dict (see build_zap_prompt).
+        provider: LLM to use (default Gemini; OLLAMA for local/private mode).
+        preferred_model: model name to try first.
+        mode: prompt template to use (v1: STANDARD only — Day 35).
+        retries: per-model retry count for transient errors.
+        timeout_ms: per-request timeout in milliseconds; None picks a
+            provider-aware default (300s Gemini, 600s Ollama).
+        api_key: explicit API key override (ignored by Ollama).
+
+    Returns:
+        ScanAnalysisResult with provider, model, analysis, prompt, usage.
+    """
+    # build_zap_prompt validates the schema and the mode (Day 35).
+    prompt = build_zap_prompt(zap_findings, mode=mode)
+
+    if timeout_ms is None:
+        timeout_ms = (
+            OLLAMA_REQUEST_TIMEOUT_S * 1000
+            if provider is LLMProvider.OLLAMA
+            else GEMINI_REQUEST_TIMEOUT_MS
+        )
+
+    if provider is LLMProvider.GEMINI:
+        model, analysis, usage = _call_gemini(
+            prompt=prompt,
+            preferred_model=preferred_model,
+            retries=retries,
+            timeout_ms=timeout_ms,
+            api_key=api_key,
+        )
+    elif provider is LLMProvider.OLLAMA:
+        model, analysis, usage = _call_ollama(
+            prompt=prompt,
+            preferred_model=preferred_model,
+            retries=retries,
+            timeout_s=max(timeout_ms // 1000, 60),
+        )
+    else:
+        raise NotImplementedError(
+            f"Provider '{provider.value}' integration is pending. "
+            "Gemini and Ollama are supported."
+        )
+
+    return ScanAnalysisResult(
+        provider=provider,
+        model=model,
+        analysis=analysis,
+        prompt=prompt,
+        usage=usage,
+    )
+
+
+def analyze_zap_file(
+    input_file: PathLike = DEFAULT_ZAP_INPUT_FILE,
+    output_file: Optional[PathLike] = DEFAULT_ZAP_ANALYSIS_OUTPUT_FILE,
+    preferred_model: Optional[str] = None,
+    title: str = "Day 36 ZAP Active-Scan LLM Analysis",
+    provider: LLMProvider = LLMProvider.GEMINI,
+    mode: PromptMode = PromptMode.STANDARD,
+) -> Tuple[str, str]:
+    """Analyze a ZAP findings JSON file with the given provider, save Markdown.
+
+    Routes through analyze_zap_findings_data() so --llm can pick gemini
+    (cloud) or ollama (local) without changing callers.
+    """
+    zap_findings = load_zap_findings(input_file)
+    result = analyze_zap_findings_data(
+        zap_findings, provider=provider, preferred_model=preferred_model, mode=mode
+    )
+
+    if output_file:
+        output_path = Path(output_file)
+        output = (
+            f"# {title}\n\n"
+            f"Provider: {result.provider.value} | Model: `{result.model}`\n\n"
+            f"{result.analysis}\n"
+        )
+        output_path.write_text(output, encoding="utf-8")
+
+    return result.model, result.analysis
+
+
 def _call_gemini(
     prompt: str,
     preferred_model: Optional[str] = None,
