@@ -1,7 +1,18 @@
 import requests # type: ignore
+
+try:
+    from .cve_cache import get_cached_cve, save_cve_to_cache
+except ImportError:
+    from cve_cache import get_cached_cve, save_cve_to_cache
+
 #This library lets Python communicate with web APIs.
 
 def lookup_cve(cve_id): 
+    # Check local cache first
+    cached_result = get_cached_cve(cve_id)
+    if cached_result:
+        return cached_result
+
     # CVE ID to search
     # NVD API endpoint
     url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}"
@@ -45,35 +56,39 @@ def lookup_cve(cve_id):
             score = cvss["baseScore"]
             severity = cvss["baseSeverity"]
 
-        return {
-            "id": cve["id"],
-            "published": cve["published"],
-            "last_modified": cve["lastModified"],
-            "description": cve["descriptions"][0]["value"],
-            "severity": severity,
-            "cvss_score": score,
-            "nvd_url": nvd_url
-        }
+        result = {
+    "id": cve["id"],
+    "published": cve["published"],
+    "last_modified": cve["lastModified"],
+    "description": cve["descriptions"][0]["value"],
+    "severity": severity,
+    "cvss_score": score,
+    "nvd_url": nvd_url
+}
+
+        save_cve_to_cache(result)
+
+    return result
     
-    return None
+    
+if __name__ == "__main__":
+    test_cases = [
+        "CVE-2021-44228",   # Valid (Log4Shell)
+        "CVE-2024-3094",    # Valid (XZ Utils)
+        "CVE-9999-999999"   # Invalid
+    ]
 
-test_cases = [
-    "CVE-2021-44228",   # Valid (Log4Shell)
-    "CVE-2024-3094",    # Valid (XZ Utils)
-    "CVE-9999-999999"   # Invalid
-]
+    for cve_id in test_cases:
+        print("\n" + "=" * 70)
+        print(f"Testing: {cve_id}")
+        print("=" * 70)
 
-for cve_id in test_cases:
-    print("\n" + "=" * 70)
-    print(f"Testing: {cve_id}")
-    print("=" * 70)
+        result = lookup_cve(cve_id)
 
-    result = lookup_cve(cve_id)
-
-    if result:
-        print(result)
-    else:
-        print("CVE not found.")
+        if result:
+            print(result)
+        else:
+            print("CVE not found.")
 
 
 

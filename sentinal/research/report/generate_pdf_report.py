@@ -1,9 +1,9 @@
-from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 from datetime import datetime
 from cve.cve_search import search_cves 
 from .executive_summary import generate_executive_summary
 from .version_manager import next_version
+from reports.pdf_generator import SentinelReportPDF
 import os
 
 
@@ -33,6 +33,7 @@ def generate_pdf_report():
     }
 
     findings = dynamic_findings
+    active_findings = []
 
     # =====================================
     # Windows Event Logs
@@ -114,7 +115,7 @@ def generate_pdf_report():
     # Create PDF
     # =====================================
 
-    pdf = FPDF()
+    pdf = SentinelReportPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 
@@ -192,6 +193,12 @@ def generate_pdf_report():
     )
 
     pdf.ln(6)
+
+    # =====================================
+    # Active Testing Findings
+    # =====================================
+
+    pdf.add_active_findings_section(active_findings)
 
     # =====================================
     # Security Findings

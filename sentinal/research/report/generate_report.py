@@ -8,6 +8,7 @@ from datetime import datetime
 from cve.cve_search import search_cves 
 from .executive_summary import generate_executive_summary
 from .version_manager import next_version
+from reports.docx_generator import add_active_findings_section
 import os
 
 def generate_docx_report():
@@ -31,8 +32,9 @@ def generate_docx_report():
     }
 
     findings = dynamic_findings
+    active_findings = []
 
-    version = next_version(scan_info["target_ip"])
+    version = next_version(scan_info["target_ip"], findings)
     filename = f"reports/docx/report_v{version}.docx"
 
     # Create a new Word document
@@ -114,6 +116,8 @@ def generate_docx_report():
 
         else:
             run.font.color.rgb = RGBColor(128, 128, 128)
+
+    add_active_findings_section(document, active_findings)
 
     # ===============================
     # Windows Event Logs
