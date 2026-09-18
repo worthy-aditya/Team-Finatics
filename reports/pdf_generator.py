@@ -15,9 +15,23 @@ def _finding_value(finding: Any, name: str, default: str = "") -> str:
 class SentinelReportPDF(FPDF):
     """PDF document with a dedicated active-testing findings section."""
 
+    def header(self) -> None:
+        if self.page_no() > 1:
+            self.set_font("Helvetica", "I", 8)
+            self.set_text_color(100, 100, 100)
+            self.cell(0, 5, "SentinelAI CLI Security Report", align="R")
+            self.set_text_color(0, 0, 0)
+            self.ln(6)
+
+    def footer(self) -> None:
+        self.set_y(-12)
+        self.set_font("Helvetica", "I", 8)
+        self.set_text_color(100, 100, 100)
+        self.cell(0, 8, f"Page {self.page_no()}", align="C")
+        self.set_text_color(0, 0, 0)
+
     def add_active_findings_section(self, active_findings: Iterable[Any]) -> None:
         findings = list(active_findings)
-        self.add_page()
         self.set_font("Helvetica", "B", 16)
         self.cell(0, 10, "Active Testing Findings", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.ln(2)
@@ -110,3 +124,46 @@ class SentinelReportPDF(FPDF):
                     )
                     self.set_font("Helvetica", "", 10)
             self.ln(4)
+
+    def add_authorization_record_pdf(self, auth_record: Any) -> None:
+        """Append the authorization and ownership verification record."""
+        self.add_page()
+        self.set_font("Helvetica", "B", 14)
+        self.cell(
+            0,
+            10,
+            "Appendix: Authorization & Verification Record",
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+        )
+        self.ln(2)
+        self.set_font("Helvetica", "I", 9)
+        self.multi_cell(
+            0,
+            5,
+            "Audit Trail Disclaimer: Immutable record of ownership verification "
+            "and user consent.",
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+        )
+        self.ln(5)
+
+        details = [
+            ("Target Domain:", _finding_value(auth_record, "target_domain", "N/A")),
+            ("Attestation User:", _finding_value(auth_record, "attestation_user", "N/A")),
+            ("Timestamp:", _finding_value(auth_record, "attestation_timestamp", "N/A")),
+            ("Verification Method:", _finding_value(auth_record, "verification_method", "N/A")),
+            ("Verification Status:", _finding_value(auth_record, "verification_status", "N/A")),
+            ("Token Used:", _finding_value(auth_record, "token_used", "N/A")),
+        ]
+        for label, value in details:
+            self.set_font("Helvetica", "B", 10)
+            self.cell(50, 7, label, border=1)
+            self.set_font("Helvetica", "", 10)
+            if label == "Verification Status:":
+                self.set_text_color(0, 150, 0 if value.upper() == "VERIFIED" else 0)
+                if value.upper() != "VERIFIED":
+                    self.set_text_color(200, 0, 0)
+            self.cell(130, 7, value, border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.set_text_color(0, 0, 0)
+        self.ln(5)

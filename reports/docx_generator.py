@@ -65,3 +65,37 @@ def add_active_findings_section(
                 code.add_run(evidence).font.name = "Courier New"
 
         doc.add_paragraph()
+
+
+def add_authorization_record_docx(doc: Document, auth_record: Any) -> None:
+    """Append the authorization and ownership verification record."""
+    doc.add_page_break()
+    doc.add_heading("Appendix: Authorization & Verification Record", level=1)
+
+    disclaimer = doc.add_paragraph()
+    disclaimer.add_run(
+        "Audit Trail Disclaimer: This section provides an immutable record of "
+        "the authorization and ownership verification performed prior to "
+        "conducting active testing."
+    ).italic = True
+
+    table = doc.add_table(rows=6, cols=2)
+    table.style = "Table Grid"
+    records = [
+        ("Target Domain / IP:", _finding_value(auth_record, "target_domain", "N/A")),
+        ("Authorized By (Attestation):", _finding_value(auth_record, "attestation_user", "N/A")),
+        ("Timestamp (UTC):", _finding_value(auth_record, "attestation_timestamp", "N/A")),
+        ("Verification Method:", _finding_value(auth_record, "verification_method", "N/A")),
+        ("Verification Status:", _finding_value(auth_record, "verification_status", "UNVERIFIED")),
+        ("Token Used:", _finding_value(auth_record, "token_used", "N/A")),
+    ]
+    for row, (label, value) in zip(table.rows, records):
+        row.cells[0].paragraphs[0].add_run(label).bold = True
+        value_run = row.cells[1].paragraphs[0].add_run(value)
+        if label == "Verification Status:":
+            value_run.font.color.rgb = RGBColor(
+                0, 150, 0 if value.upper() == "VERIFIED" else 0
+            )
+            if value.upper() != "VERIFIED":
+                value_run.font.color.rgb = RGBColor(200, 0, 0)
+    doc.add_paragraph()

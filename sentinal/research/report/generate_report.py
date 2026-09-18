@@ -8,10 +8,19 @@ from datetime import datetime
 from cve.cve_search import search_cves 
 from .executive_summary import generate_executive_summary
 from .version_manager import next_version
-from reports.docx_generator import add_active_findings_section
+from reports.docx_generator import (
+    add_active_findings_section,
+    add_authorization_record_docx,
+)
+from reports.schema import AuthorizationRecord, load_authorization_record
 import os
 
-def generate_docx_report():
+
+def generate_docx_report(
+    active_findings=None,
+    authorization_record=None,
+    consent_audit_log_path=None,
+):
     
     results = search_cves("Apache")
 
@@ -32,7 +41,17 @@ def generate_docx_report():
     }
 
     findings = dynamic_findings
-    active_findings = []
+    active_findings = list(active_findings or [])
+    if authorization_record is None and consent_audit_log_path:
+        authorization_record = load_authorization_record(consent_audit_log_path)
+    if active_findings and authorization_record is None:
+        authorization_record = AuthorizationRecord(
+            target_domain=scan_info["target_ip"],
+            attestation_user="N/A",
+            attestation_timestamp="N/A",
+            verification_status="UNVERIFIED",
+            verification_method="No consent audit record supplied",
+        )
 
     version = next_version(scan_info["target_ip"], findings)
     filename = f"reports/docx/report_v{version}.docx"
@@ -117,7 +136,10 @@ def generate_docx_report():
         else:
             run.font.color.rgb = RGBColor(128, 128, 128)
 
-    add_active_findings_section(document, active_findings)
+    if active_findings:
+        add_active_findings_section(document, active_findings)
+        if authorization_record is not None:
+            add_authorization_record_docx(document, authorization_record)
 
     # ===============================
     # Windows Event Logs

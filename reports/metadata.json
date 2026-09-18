@@ -1,5 +1,5 @@
 {
-    "latest_version": 15,
+    "latest_version": 18,
     "created_reports": [
         {
             "version": 1,
@@ -74,6 +74,21 @@
         {
             "version": 15,
             "timestamp": "2026-09-15 11:51:45",
+            "target": "192.168.1.10"
+        },
+        {
+            "version": 16,
+            "timestamp": "2026-09-15 12:02:01",
+            "target": "192.168.1.10"
+        },
+        {
+            "version": 17,
+            "timestamp": "2026-09-18 13:02:05",
+            "target": "192.168.1.10"
+        },
+        {
+            "version": 18,
+            "timestamp": "2026-09-18 13:02:36",
             "target": "192.168.1.10"
         }
     ]
