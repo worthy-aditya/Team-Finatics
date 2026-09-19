@@ -4,6 +4,8 @@ from dataclasses import asdict, is_dataclass
 from typing import Any, Iterable
 
 from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import RGBColor
 
 
@@ -13,6 +15,52 @@ def _finding_value(finding: Any, name: str, default: str = "") -> str:
     if isinstance(finding, dict):
         return str(finding.get(name, default) or default)
     return str(getattr(finding, name, default) or default)
+
+
+def set_cell_background(cell: Any, fill_hex: str) -> None:
+    """Set a table cell's background color."""
+    tc_pr = cell._element.get_or_add_tcPr()
+    shading = OxmlElement("w:shd")
+    shading.set(qn("w:val"), "clear")
+    shading.set(qn("w:color"), "auto")
+    shading.set(qn("w:fill"), fill_hex)
+    tc_pr.append(shading)
+
+
+def add_finding_card_docx(
+    doc: Document, finding: Any, finding_type: str = "PASSIVE"
+) -> None:
+    """Render a finding with distinct active and passive visual treatment."""
+    table = doc.add_table(rows=2, cols=1)
+    table.style = "Table Grid"
+    header = table.cell(0, 0)
+    active = finding_type.upper() == "ACTIVE"
+    set_cell_background(header, "D9534F" if active else "FCE4B2")
+    paragraph = header.paragraphs[0]
+    tag_run = paragraph.add_run(
+        f" {'CONFIRMED EXPLOITABLE' if active else 'POTENTIAL FINDING'} "
+    )
+    tag_run.bold = True
+    title_run = paragraph.add_run(
+        f"| {_finding_value(finding, 'title', 'Untitled finding')}"
+    )
+    title_run.bold = True
+    if active:
+        tag_run.font.color.rgb = RGBColor(255, 255, 255)
+        title_run.font.color.rgb = RGBColor(255, 255, 255)
+
+    body = table.cell(1, 0).paragraphs[0]
+    body.add_run(
+        f"Severity: {_finding_value(finding, 'severity', 'Medium')}\n"
+    ).bold = True
+    body.add_run(
+        f"Target: {_finding_value(finding, 'target', _finding_value(finding, 'target_url', 'N/A'))}\n"
+    )
+    body.add_run(f"Description: {_finding_value(finding, 'description')}\n")
+    body.add_run(f"Confidence: {_finding_value(finding, 'confidence', 'N/A')}\n")
+    body.add_run(f"Associated CVE: {_finding_value(finding, 'cve_id', 'N/A')}\n")
+    body.add_run(f"Remediation: {_finding_value(finding, 'remediation', 'N/A')}")
+    doc.add_paragraph()
 
 
 def add_active_findings_section(
@@ -34,25 +82,7 @@ def add_active_findings_section(
         return
 
     for finding in findings:
-        heading = doc.add_heading(level=2)
-        severity = _finding_value(finding, "severity", "Unknown")
-        title = _finding_value(finding, "title", "Untitled finding")
-        run = heading.add_run(f"[{severity.upper()}] {title}")
-        if severity.lower() in {"high", "critical"}:
-            run.font.color.rgb = RGBColor(200, 0, 0)
-
-        table = doc.add_table(rows=5, cols=2)
-        table.style = "Table Grid"
-        details = [
-            ("Target Endpoint:", _finding_value(finding, "target_url", "N/A")),
-            ("Confidence Level:", _finding_value(finding, "confidence", "N/A")),
-            ("Associated CVE:", _finding_value(finding, "cve_id", "N/A")),
-            ("Description:", _finding_value(finding, "description")),
-            ("Remediation:", _finding_value(finding, "remediation", "N/A")),
-        ]
-        for row, (label, value) in zip(table.rows, details):
-            row.cells[0].text = label
-            row.cells[1].text = value
+        add_finding_card_docx(doc, finding, finding_type="ACTIVE")
 
         for evidence_name, label in (
             ("evidence_request", "Evidence (HTTP Request):"),

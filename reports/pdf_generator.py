@@ -12,8 +12,39 @@ def _finding_value(finding: Any, name: str, default: str = "") -> str:
     return str(getattr(finding, name, default) or default)
 
 
+def add_finding_card_pdf(
+    pdf: FPDF, finding: Any, finding_type: str = "PASSIVE"
+) -> None:
+    """Render a finding with distinct active and passive visual treatment."""
+    active = finding_type.upper() == "ACTIVE"
+    pdf.set_fill_color(*( (217, 83, 79) if active else (252, 228, 178) ))
+    pdf.set_text_color(255, 255, 255) if active else pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "B", 10)
+    tag = "[CONFIRMED EXPLOITABLE]" if active else "[POTENTIAL]"
+    pdf.multi_cell(
+        0, 8, f" {tag} {_finding_value(finding, 'title', 'Untitled finding')}",
+        border=1, fill=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT,
+    )
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "", 9)
+    target = _finding_value(finding, "target", _finding_value(finding, "target_url", "N/A"))
+    pdf.multi_cell(
+        0, 5,
+        f"Severity: {_finding_value(finding, 'severity', 'Medium')}\n"
+        f"Target: {target}\nDescription: {_finding_value(finding, 'description')}",
+        border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT,
+    )
+    pdf.ln(4)
+
+
 class SentinelReportPDF(FPDF):
     """PDF document with a dedicated active-testing findings section."""
+
+    def add_finding_card_pdf(
+        self, finding: Any, finding_type: str = "PASSIVE"
+    ) -> None:
+        """Render a visually distinct active or passive finding card."""
+        add_finding_card_pdf(self, finding, finding_type)
 
     def header(self) -> None:
         if self.page_no() > 1:
@@ -59,38 +90,12 @@ class SentinelReportPDF(FPDF):
             return
 
         for finding in findings:
-            severity = _finding_value(finding, "severity", "Unknown")
-            self.set_font("Helvetica", "B", 12)
-            if severity.lower() in {"high", "critical"}:
-                self.set_text_color(200, 0, 0)
-            self.cell(
-                0,
-                8,
-                f"[{severity.upper()}] {_finding_value(finding, 'title', 'Untitled finding')}",
-                new_x=XPos.LMARGIN,
-                new_y=YPos.NEXT,
-            )
-            self.set_text_color(0, 0, 0)
-
+            self.add_finding_card_pdf(finding, finding_type="ACTIVE")
             self.set_font("Helvetica", "", 10)
             self.multi_cell(
                 0,
                 5,
-                f"Target: {_finding_value(finding, 'target_url', 'N/A')}",
-                new_x=XPos.LMARGIN,
-                new_y=YPos.NEXT,
-            )
-            self.multi_cell(
-                0,
-                5,
                 f"Confidence: {_finding_value(finding, 'confidence', 'N/A')}",
-                new_x=XPos.LMARGIN,
-                new_y=YPos.NEXT,
-            )
-            self.multi_cell(
-                0,
-                5,
-                f"Description: {_finding_value(finding, 'description')}",
                 new_x=XPos.LMARGIN,
                 new_y=YPos.NEXT,
             )
