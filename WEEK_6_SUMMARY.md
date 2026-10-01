@@ -1,7 +1,7 @@
 # Week 6 — Sprint Summary & Feature-Verification Guide (Feature Sprint: ZAP + Findings)
 
 **Project:** SentinelAI CLI · Team Finatics · CodeQuest 4.0
-**Scope:** Week 6 of the Feature Sprint (Days 36–42) — completed so far: **Day 36 (ZAP prompt vs live LLM)** and **Day 37 (authorization-flow team demo)**
+**Scope:** Week 6 of the Feature Sprint (Days 36–42) — completed so far: **Day 36 (ZAP prompt vs live LLM)**, **Day 37 (authorization-flow team demo)**, and **Day 38 (plugin contract + ZAP active-check adapter)**
 **Updated:** 2026-09-10 · branch **`aditya-dev`** @ Day 36+37 commits (all pushed)
 
 This condenses `WEEK_5_DAY_36_REPORT.md` and `WEEK_5_DAY_37_REPORT.md` into one
@@ -46,6 +46,20 @@ commands and exact expected output.
   legitimately produces a fresh consent grant before the token mismatch — the
   record now documents that 4-record trail for the team.
 - **Files:** `tests/demo_authorization_flow.py`, `WEEK_5_DAY_37_REPORT.md`.
+
+### Day 38 — Plugin contract and ZAP active-check adapter
+- **Task:** Wire ZAP active scanning into a reusable check/orchestrator
+  architecture and carry OWASP/MITRE mapping provenance into the analysis path.
+- **Delivered:** `sentinelai/checks/base.py` defines `CheckType`, `Finding`, and
+  `VulnerabilityCheck`; `orchestrator.py` runs independent boxes with isolated
+  errors; `zap.py` calls the ZAP JSON API, polls active-scan progress, normalizes
+  alerts, and refuses to send traffic without `active_authorized=True`.
+- **Validation:** `tests/test_day38_checks.py` plus `tests/test_zap_prompt.py` —
+  **18 passed** offline. The ZAP prompt now requires evidence-based OWASP/MITRE
+  mapping and forbids invented ATT&CK IDs.
+- **Scope note:** CLI instantiation, a live ZAP/Juice Shop scan, report appendix,
+  and risk weighting remain the next Day 38–42 integration slices.
+- **Full report:** `WEEK_6_DAY_38_REPORT.md`.
 
 ### Upcoming (per plan)
 - **Day 38–42** — Aditya: remediation per finding, risk-weighting (confirmed vs

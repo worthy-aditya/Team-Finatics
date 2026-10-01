@@ -513,8 +513,11 @@ For EACH distinct alert, provide a structured finding:
   - Evidence from scan: quote the alert's attack/evidence strings exactly; if
     the alert has none, say what triggered it (e.g., a missing header)
   - Why it matters: plain-English explanation tied to CWE <cwe_id> when present
-  - OWASP Top 10: use the alert's OWASP tag when present; otherwise propose the
-    closest OWASP 2021 category and mark it "(proposed)"
+    - OWASP Top 10: use the alert's OWASP tag when present; otherwise propose the
+        closest OWASP 2021 category and mark it "(proposed)"
+    - MITRE ATT&CK: cite the provided MITRE mapping when present; if no mapping
+        is supplied, state that no direct mapping was provided rather than forcing
+        a technique. Never invent an ATT&CK ID.
 Rank by risk first, then confidence. If the same alert fires on many URLs,
 deduplicate into ONE finding and list the affected URLs. Informational-level
 alerts may be summarized briefly at the end without full ranking.
@@ -550,8 +553,8 @@ Series) only when the data supports it, and never invent URLs.
   authenticated flows outside scope, vulnerable dependencies (use a software
   composition analysis tool), and anything needing credentials.
 
-Do not fabricate alerts, plugin IDs, CWE numbers, or OWASP categories that the
-JSON does not support. Keep the tone educational but technically accurate;
+Do not fabricate alerts, plugin IDs, CWE numbers, OWASP categories, or MITRE
+ATT&CK IDs that the JSON does not support. Keep the tone educational but technically accurate;
 concise and actionable.
 """
 
