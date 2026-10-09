@@ -10,8 +10,8 @@ entry points call behind the ``--active`` flag:
 
 A single shared implementation keeps the two parity-locked CLIs identical
 (see tests/test_cli_sync.py) and gives the Day 34 deliverable one place to
-be tested offline. It is intentionally minimal: no scan/network logic beyond
-the two gates, no ZAP code (that is Affan's track, Days 36/38-40).
+be tested offline. After the gate passes, the same module can execute the
+Day 38-40 ZAP active-check path without widening the authorization boundary.
 """
 
 from __future__ import annotations
@@ -31,11 +31,13 @@ from sentinelai.domain_verify import (
     DomainVerificationResult,
     verify_domain_ownership,
 )
+from sentinelai.checks import ZAPActiveCheck, ZAPClient, run_all_checks
 
 __all__ = [
     "ActiveAuthorization",
     "active_scan_host",
     "authorize_active_testing",
+    "run_authorized_active_checks",
 ]
 
 
@@ -167,3 +169,30 @@ def authorize_active_testing(
             f"(status={domain.status_code}, url={domain.url}).",
         )
     return ActiveAuthorization(True, consent, domain)
+
+
+def run_authorized_active_checks(
+    target: str,
+    *,
+    base_url: str = "http://127.0.0.1:8080",
+    api_key: Optional[str] = None,
+    timeout: float = 10.0,
+    client: Optional[ZAPClient] = None,
+):
+    """Run the authorized OWASP ZAP check for a URL-based target.
+
+    Day 41 adds a live reachability check: the helper verifies the ZAP daemon is
+    responding before it starts an active scan. This keeps the CLI fail-closed
+    and makes "real environment not available" errors explicit instead of
+    hidden behind a generic scan failure.
+    """
+    target = (target or "").strip()
+    if not target:
+        raise ValueError("A valid target URL is required for the ZAP active scan.")
+    if "://" not in target:
+        target = f"https://{target}"
+
+    zap_client = client or ZAPClient(base_url=base_url, api_key=api_key, timeout=timeout)
+    zap_client.version()
+    zap_check = ZAPActiveCheck(zap_client)
+    return run_all_checks(target, [zap_check], active_authorized=True)

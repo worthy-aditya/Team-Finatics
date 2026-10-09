@@ -4,7 +4,11 @@ import click
 from sentinelai.ui import error, info, print_panel, spinner, step, success, warn
 from sentinelai.scanner import NmapScanner, Scanner
 from sentinelai.approval import ApprovalError, request_approval
-from sentinelai.active_gate import active_scan_host, authorize_active_testing
+from sentinelai.active_gate import (
+    active_scan_host,
+    authorize_active_testing,
+    run_authorized_active_checks,
+)
 
 @click.command()
 @click.option("--target", required=True, help="Target IP or hostname to scan")
@@ -41,6 +45,16 @@ def scan(target, aggressive, fast, timeout, output_json, json_file, require_conf
         scan_host = active_scan_host(target)
         if scan_host != target:
             info(f"Scan stage target: {scan_host}")
+        try:
+            active_target = target if "://" in target else f"https://{target}"
+            zap_result = run_authorized_active_checks(active_target)
+            if zap_result.get("count"):
+                success(f"ZAP active scan completed with {zap_result['count']} findings")
+                info("Active findings are ordered by confirmed posture and risk score.")
+            else:
+                info("ZAP active scan completed without reporting any findings.")
+        except Exception as exc:  # pragma: no cover - CLI fails safely for live environment issues
+            raise click.ClickException(f"ZAP active scan failed: {exc}") from exc
     else:
         scan_host = target
         # Day 20 human-in-the-loop approval (reuses sentinelai.approval).

@@ -1,7 +1,7 @@
 """Pluggable defensive vulnerability checks for SentinelAI."""
 
 from sentinelai.checks.base import CheckType, Finding, VulnerabilityCheck
-from sentinelai.checks.orchestrator import run_all_checks
+from sentinelai.checks.orchestrator import rank_findings, run_all_checks
 from sentinelai.checks.zap import ZAPActiveCheck, ZAPClient, ZAPError
 
 __all__ = [
@@ -12,4 +12,5 @@ __all__ = [
     "ZAPClient",
     "ZAPError",
     "run_all_checks",
+    "rank_findings",
 ]

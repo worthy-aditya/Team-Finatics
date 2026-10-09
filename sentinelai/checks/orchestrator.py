@@ -7,6 +7,18 @@ from typing import Any, Dict, Iterable, List
 from sentinelai.checks.base import Finding, VulnerabilityCheck
 
 
+def rank_findings(findings: Iterable[Finding]) -> List[Finding]:
+    """Rank confirmed findings before potential findings, then by score."""
+    return sorted(
+        findings,
+        key=lambda finding: (
+            not finding.confirmed,
+            -finding.risk_score,
+            finding.name.lower(),
+        ),
+    )
+
+
 def run_all_checks(
     target: str,
     checks: Iterable[VulnerabilityCheck],
@@ -31,6 +43,7 @@ def run_all_checks(
         except Exception as exc:  # noqa: BLE001 - isolate independent boxes
             errors.append({"check": check.name, "error": str(exc)})
 
+    findings = rank_findings(findings)
     return {
         "target": target,
         "findings": [finding.to_dict() for finding in findings],
