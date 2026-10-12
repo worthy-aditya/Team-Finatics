@@ -170,3 +170,70 @@ def auto_parse_to_file(input_file: str) -> Tuple[str, int]:
     tmp = Path(tempfile.gettempdir()) / f"sentinelai_auto_{abs(hash(Path(input_file))) % 10**8}.json"
     tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
     return str(tmp), int(data["count"])
+
+
+# Day 53: central registry of supported providers and their metadata.
+# This is the single source of truth for which providers exist and how to
+# present them (used by the routing helpers below and the health dashboard).
+PROVIDER_REGISTRY: Dict[str, Dict[str, Any]] = {
+    "gemini": {
+        "name": "Gemini",
+        "type": "cloud",
+        "api_key_required": True,
+        "default_model": "gemini-3.6-flash",
+        "note": "Cloud LLM; rich analyst-facing reports (Day 20 default).",
+    },
+    "ollama": {
+        "name": "Ollama",
+        "type": "local",
+        "api_key_required": False,
+        "default_model": "llama3.2",
+        "note": "Local LLM; keeps sensitive data on-host (zero cloud egress).",
+    },
+    "deepseek": {
+        "name": "DeepSeek",
+        "type": "cloud",
+        "api_key_required": True,
+        "default_model": "deepseek-chat",
+        "note": "Cost-effective cloud LLM alternative for bulk analysis.",
+    },
+}
+
+
+# Day 53 additions
+def provider_is_healthy(provider_name: str, provider_scores: Dict[str, float], threshold: float = 70.0) -> bool:
+    """Check if a provider's health score meets the healthy threshold.
+
+    Args:
+        provider_name: Name of the provider to check.
+        provider_scores: Dict of provider_name -> health_score.
+        threshold: Minimum health score to be considered healthy (default 70).
+
+    Returns:
+        True if the provider exists and its score >= threshold.
+    """
+    score = float(provider_scores.get(provider_name, 0.0))
+    return score >= threshold
+
+
+def get_all_providers() -> List[str]:
+    """Return a list of all registered provider names (lowercase).
+
+    Returns:
+        List of provider names from the provider registry.
+    """
+    return list(PROVIDER_REGISTRY.keys())
+
+
+def get_provider_registry() -> Dict[str, Dict[str, Any]]:
+    """Return the full provider registry with metadata.
+
+    Each entry maps provider name -> metadata dict with keys:
+        name, type, api_key_required, default_model, note
+
+    Returns:
+        Dict of provider metadata.
+    """
+    return {k: dict(v) for k, v in PROVIDER_REGISTRY.items()}
+
+

@@ -10,6 +10,7 @@ from sentinelai.prompt_engine import (
     resolve_provider,
 )
 from sentinelai.routing import auto_parse_to_file, is_raw_log_export, recommend_provider, route_provider
+from sentinelai.dashboard import build_dashboard
 
 
 # Free providers the team actually uses right now; others are accepted by the
@@ -27,7 +28,8 @@ LLM_CHOICES = ["gemini", "ollama", "openai", "claude"]
 @click.option("--mode", type=click.Choice(["standard", "beginner", "remediation"], case_sensitive=False), default="standard", show_default=True, help="Analysis mode: standard risk report, remediation plan (event logs + scans), or beginner-friendly")
 @click.option("--no-save", is_flag=True, help="Print analysis without saving a Markdown file")
 @click.option("--provider-scores", "provider_scores_json", default=None, help="JSON file with provider health scores {<provider>: <score>} used for health-aware routing (Day 52)")
-def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_save, provider_scores_json):
+@click.option("--dashboard", is_flag=True, help="Print the provider health dashboard and exit (no analysis)")
+def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_save, provider_scores_json, dashboard):
     """Analyze saved Nmap scan or Windows Event Log JSON via an LLM (--llm gemini|ollama)."""
     # Day 4 sync: this root entry point must behave EXACTLY like
     # sentinelai/cli.py's analyze (same --routing / --model / --no-save /
@@ -44,6 +46,11 @@ def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_sa
         with open(provider_scores_json, encoding="utf-8") as _fh:
             provider_scores = json.load(_fh)
             info(f"Loaded provider health scores: {provider_scores}")
+
+    # Day 53: --dashboard short-circuits analysis to show provider health.
+    if dashboard:
+        click.echo(build_dashboard(provider_scores or None))
+        return
 
     effective_llm = None
     if provider_scores:
