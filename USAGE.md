@@ -68,13 +68,40 @@ This installs:
 
 ---
 
+## Domain verification and authorized scan setup
+
+Before running an active target scan, complete an ownership check and consent gate.
+
+### Recommended setup
+
+1. Confirm the operator has explicit permission to test the target.
+2. Verify that the target domain matches the expected owner.
+3. Place a verification file under the site’s `.well-known` directory for the ownership check, for example:
+
+```text
+.well-known/sentinelai-verification.txt
+```
+
+Example content:
+
+```text
+sentinelai-verification=allowed-example-domain
+```
+
+4. Use the project’s consent and domain verification functions to compare the expected domain against the approved target.
+5. Only then run the scan on the approved host.
+
+> This workflow keeps the repo aligned with the responsible-use and legal guardrails in [SECURITY.md](SECURITY.md). Do not run active scanning against an unapproved system or third-party domain.
+
+---
+
 ## Configuration
 
-### Optional: Enable Gemini AI Analysis
+### Optional: Enable AI Analysis
 
-SentinelAI can use Google's **Gemini API** to generate natural-language analysis summaries. If you skip this, a deterministic rule-based fallback will be used automatically.
+SentinelAI can use **Gemini**, **Ollama**, or a **Mistral-compatible local endpoint** to generate natural-language analysis summaries. If you skip this, a deterministic rule-based fallback will be used automatically.
 
-#### To enable Gemini:
+#### Option A: Gemini API
 
 1. **Get a free Gemini API key** from [Google AI Studio](https://aistudio.google.com/apikey)
 2. **Set the environment variable** (this key is never committed to the repo):
@@ -82,24 +109,89 @@ SentinelAI can use Google's **Gemini API** to generate natural-language analysis
 **Windows (PowerShell):**
 ```powershell
 $env:GEMINI_API_KEY = "your-api-key-here"
+$env:LLM_PROVIDER = "gemini"
 ```
 
 **Windows (Command Prompt):**
 ```cmd
 set GEMINI_API_KEY=your-api-key-here
+set LLM_PROVIDER=gemini
 ```
 
 **macOS/Linux:**
 ```bash
 export GEMINI_API_KEY="your-api-key-here"
+export LLM_PROVIDER="gemini"
 ```
 
-Or, for permanent storage, create a `.env` file in the project root (this file is in `.gitignore`, so it won't be committed):
-```
-GEMINI_API_KEY=your-api-key-here
+#### Option B: Ollama (local LLM)
+
+Use Ollama when you want fully local AI inference without sending prompts to an external API.
+
+**Windows (PowerShell):**
+```powershell
+$env:LLM_PROVIDER = "ollama"
+$env:OLLAMA_MODEL = "mistral"
+$env:OLLAMA_BASE_URL = "http://localhost:11434"
 ```
 
-> **Note:** The API key is optional. If it's not set, SentinelAI will use its built-in rule-based fallback for analysis.
+**macOS/Linux:**
+```bash
+export LLM_PROVIDER="ollama"
+export OLLAMA_MODEL="mistral"
+export OLLAMA_BASE_URL="http://localhost:11434"
+```
+
+If you are using a local Ollama install, make sure the service is running first:
+```bash
+ollama serve
+```
+
+#### Option C: Mistral-compatible local endpoint
+
+This is useful when you are pointing to a local or private Mistral-compatible server.
+
+**Windows (PowerShell):**
+```powershell
+$env:LLM_PROVIDER = "mistral"
+$env:MISTRAL_MODEL = "mistral-small"
+$env:MISTRAL_BASE_URL = "http://localhost:11434/v1"
+$env:MISTRAL_API_KEY = "local-key"
+```
+
+**macOS/Linux:**
+```bash
+export LLM_PROVIDER="mistral"
+export MISTRAL_MODEL="mistral-small"
+export MISTRAL_BASE_URL="http://localhost:11434/v1"
+export MISTRAL_API_KEY="local-key"
+```
+
+#### Privacy mode (offline / no external calls)
+
+Use privacy mode when you want SentinelAI to stay fully offline and avoid all outbound AI requests.
+
+**Windows (PowerShell):**
+```powershell
+$env:PRIVACY_MODE = "true"
+```
+
+**macOS/Linux:**
+```bash
+export PRIVACY_MODE="true"
+```
+
+This forces the project to use the built-in rule-based summary instead of Gemini, Ollama, or Mistral calls.
+
+For permanent storage, create a `.env` file in the project root (this file is in `.gitignore`, so it won't be committed):
+```env
+LLM_PROVIDER=ollama
+OLLAMA_MODEL=mistral
+OLLAMA_BASE_URL=http://localhost:11434
+PRIVACY_MODE=true
+```
+
+> **Note:** The API key is optional. If it is not set and no local provider is configured, SentinelAI will use its built-in rule-based fallback for analysis.
 
 ---
 
@@ -201,7 +293,13 @@ Available commands:
 - `scan <target>` — Scan a target IP or domain
 - `network` — Perform network reconnaissance
 - `report` — Generate a security report
+- `setup` — Create a fresh-machine `.env` configuration for Gemini / Ollama / Mistral
 - `start` — Enter interactive mode
+
+Example:
+```bash
+python sentinelai.py setup --provider ollama --model mistral --privacy
+```
 
 ---
 

@@ -36,6 +36,13 @@ GEMINI_API_URL = (
     f"{GEMINI_MODEL}:generateContent"
 )
 
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "gemini").lower()
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1")
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+MISTRAL_MODEL = os.environ.get("MISTRAL_MODEL", "mistral-small")
+MISTRAL_BASE_URL = os.environ.get("MISTRAL_BASE_URL", "http://localhost:11434/v1").rstrip("/")
+MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY", "local-key")
+
 
 def _describe_finding(finding):
     """
@@ -239,15 +246,82 @@ def _gemini_backed_summary(findings, audience="general"):
         raise RuntimeError(f"Gemini API call failed: {e}") from e
 
 
-def analyze_findings(findings, audience="general", use_llm=True):
+def _local_llm_summary(findings, audience="general"):
+    """Call a local LLM provider such as Ollama or a Mistral-compatible server."""
+    try:
+        import requests
+    except ImportError as e:
+        raise RuntimeError("The 'requests' library is required for local LLM calls.") from e
+
+    provider = os.environ.get("LLM_PROVIDER", "gemini").lower()
+    prompt = _build_gemini_prompt(findings, audience=audience)
+
+    if provider == "ollama":
+        url = f"{OLLAMA_BASE_URL}/api/generate"
+        payload = {
+            "model": os.environ.get("OLLAMA_MODEL", OLLAMA_MODEL),
+            "prompt": prompt,
+            "stream": False,
+        }
+        try:
+            response = requests.post(url, json=payload, timeout=45)
+        except Exception as e:
+            raise RuntimeError(f"Ollama request failed: {e}") from e
+
+        if response.status_code != 200:
+            body = response.text or ""
+            short_body = body[:1000] + ("..." if len(body) > 1000 else "")
+            raise RuntimeError(f"Ollama API returned {response.status_code}: {short_body}")
+
+        try:
+            data = response.json()
+        except ValueError as e:
+            raise RuntimeError(f"Ollama response was not valid JSON: {e}") from e
+
+        if isinstance(data, dict) and "response" in data:
+            return str(data["response"]).strip()
+        raise RuntimeError(f"Unexpected Ollama response shape: {data}")
+
+    if provider == "mistral":
+        url = f"{MISTRAL_BASE_URL}/chat/completions"
+        payload = {
+            "model": os.environ.get("MISTRAL_MODEL", MISTRAL_MODEL),
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2,
+        }
+        headers = {"Authorization": f"Bearer {os.environ.get('MISTRAL_API_KEY', MISTRAL_API_KEY)}"}
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=45)
+        except Exception as e:
+            raise RuntimeError(f"Mistral request failed: {e}") from e
+
+        if response.status_code != 200:
+            body = response.text or ""
+            short_body = body[:1000] + ("..." if len(body) > 1000 else "")
+            raise RuntimeError(f"Mistral API returned {response.status_code}: {short_body}")
+
+        try:
+            data = response.json()
+        except ValueError as e:
+            raise RuntimeError(f"Mistral response was not valid JSON: {e}") from e
+
+        try:
+            return data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            raise RuntimeError(f"Unexpected Mistral response shape: {data}") from e
+
+    raise RuntimeError(f"Unsupported local LLM provider: {provider}")
+
+
+def analyze_findings(findings, audience="general", use_llm=True, privacy_mode=False):
     """
     Generate a natural-language analysis summary for a list of mapped
     security findings.
 
-    Tries the real Gemini API first (if `use_llm` is True and
-    GEMINI_API_KEY is set). Automatically falls back to a deterministic
-    rule-based summary if the API key is missing or the API call fails,
-    so this function always returns a usable result.
+    Tries the configured backend first (Gemini, Ollama, or Mistral when
+    selected via environment configuration). Automatically falls back to a
+    deterministic rule-based summary if the API key or provider is unavailable,
+    or if privacy mode is enabled to keep all processing offline.
 
     Args:
         findings (list[dict]): Each item shaped like:
@@ -255,35 +329,37 @@ def analyze_findings(findings, audience="general", use_llm=True):
             (this is exactly the shape returned by
             framework_mapper.map_keyword()).
         audience (str): "general", "student", "enterprise", "red_team",
-            "blue_team", or "bug_bounty". Only affects Gemini-backed
+            "blue_team", or "bug_bounty". Only affects LLM-backed
             output; the rule-based fallback ignores this.
-        use_llm (bool): If False, skip Gemini entirely and use the
+        use_llm (bool): If False, skip LLM entirely and use the
             rule-based summary (useful for fast/offline tests).
+        privacy_mode (bool): When True, never make external LLM calls and
+            fall back to the deterministic offline summary.
 
     Returns:
         str: A multi-line analysis summary.
-
-    Example:
-        >>> findings = [
-        ...     {"keyword": "phishing", "owasp": None,
-        ...      "mitre": {"id": "T1566", "name": "Phishing", "domain": "enterprise"}}
-        ... ]
-        >>> print(analyze_findings(findings, use_llm=False))
-        Analysis Summary: 1 finding(s) reviewed.
-        ...
     """
     if not findings:
         return "No findings were provided; no analysis could be generated."
 
+    privacy_enabled = privacy_mode or str(os.environ.get("PRIVACY_MODE", "")).strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+    if privacy_enabled:
+        return _rule_based_summary(findings)
+
     if use_llm:
         try:
+            provider = os.environ.get("LLM_PROVIDER", "gemini").lower()
+            if provider in {"ollama", "mistral"}:
+                return _local_llm_summary(findings, audience=audience)
             return _gemini_backed_summary(findings, audience=audience)
         except RuntimeError as e:
             # Print diagnostic to stderr so callers running scripts can
             # see why the LLM backend failed, then fall back to the
             # deterministic rule-based summary so the pipeline remains
             # usable regardless.
-            print(f"Gemini error: {e}", file=sys.stderr)
+            print(f"LLM error: {e}", file=sys.stderr)
             pass
 
     return _rule_based_summary(findings)

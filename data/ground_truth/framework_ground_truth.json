@@ -1,0 +1,14 @@
+[
+  {"keyword": "sql injection", "expected_owasp": "A05:2025", "expected_mitre": null},
+  {"keyword": "broken access control", "expected_owasp": "A01:2025", "expected_mitre": null},
+  {"keyword": "default credentials", "expected_owasp": "A02:2025", "expected_mitre": "T1694.001"},
+  {"keyword": "dependency vulnerability", "expected_owasp": "A03:2025", "expected_mitre": null},
+  {"keyword": "encryption", "expected_owasp": "A04:2025", "expected_mitre": "T1600"},
+  {"keyword": "cross-site scripting", "expected_owasp": "A05:2025", "expected_mitre": "T1189"},
+  {"keyword": "phishing", "expected_owasp": null, "expected_mitre": "T1566"},
+  {"keyword": "brute force", "expected_owasp": "A07:2025", "expected_mitre": "T1110"},
+  {"keyword": "misconfiguration", "expected_owasp": "A02:2025", "expected_mitre": "T1596.001"},
+  {"keyword": "unauthorized access", "expected_owasp": "A01:2025", "expected_mitre": "T1558"},
+  {"keyword": "email spoofing", "expected_owasp": null, "expected_mitre": "T1684.002"},
+  {"keyword": "service stop", "expected_owasp": null, "expected_mitre": "T1489"}
+]

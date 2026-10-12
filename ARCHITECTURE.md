@@ -10,28 +10,33 @@ Markdown report.
 ## System Overview
 
 ```text
-Nmap output --------------------> nmap_parser.py
-                                      |
-Event log text -----------------> event_log_parser.py
-                                      |
-                                      v
-                              keyword extraction
-                                      |
-                                      v
-                              framework_mapper.py
-                              /                 \
-                   owasp_mapper.py       mitre_mapper.py
-                              \                 /
-                               v               v
-                              mapped findings
-                                      |
-                                      v
-                              llm_analyzer.py
-                         Gemini API or offline fallback
-                                      |
-                                      v
-                              report_generator.py
-                         text | JSON | Markdown
+Authorized target / domain ----------------------------> consent_gate.py
+                                                        |
+                                                        v
+                                         domain_verifier.py / .well-known ownership check
+                                                        |
+                                                        v
+                                     access_policy.py + session_guard.py + policy_guard.py
+                                                        |
+                                                        v
+                           ZAP active scan (approved local / in-scope target) ---> findings
+                                                        |
+                                                        v
+Nmap output --------------------> nmap_parser.py        mapped findings
+                                      |                          |
+Event log text -----------------> event_log_parser.py -----> framework_mapper.py
+                                      |                                /          \
+                                      v                              owasp_mapper.py  mitre_mapper.py
+                              keyword extraction                     \          /
+                                      |                               v        v
+                                      v                         mapped findings
+                              framework_mapper.py                     |
+                              /                 \                     v
+                   owasp_mapper.py       mitre_mapper.py          llm_analyzer.py
+                              \                 /             Gemini API or offline fallback
+                               v               v                          |
+                              mapped findings -----------------------> report_generator.py
+                                                                 text | JSON | Markdown
 ```
 
 ## Main Modules
@@ -47,6 +52,15 @@ Event log text -----------------> event_log_parser.py
 | `report_generator.py` | Renders mapped findings and analysis as text, JSON, or Markdown. |
 | `nmap_report_pipeline.py` | Orchestrates Nmap parsing, mapping, analysis, and reporting. |
 | `event_log_report_pipeline.py` | Orchestrates the equivalent event-log workflow. |
+| `consent_gate.py` | Enforces expected-domain consent checks before continuing. |
+| `domain_verifier.py` | Confirms the requested domain is the approved target. |
+| `access_policy.py` | Combines consent, domain, and allowlist checks. |
+| `session_guard.py` | Validates a session context against the allowed target. |
+| `audit_guard.py` | Adds audit-specific validation to the workflow. |
+| `trace_guard.py` | Adds trace-specific validation to the workflow. |
+| `policy_guard.py` | Enforces policy-aware validation of the target context. |
+| `validation_guard.py` | Validates the identity and scope of the allowed flow. |
+| `compliance_guard.py` | Applies the final compliance-style gate to the authorized scan flow. |
 | `remediation_mapper.py` | Adds actionable remediation guidance for mapped OWASP categories and MITRE techniques. |
 
 ## Data Flow
@@ -55,11 +69,13 @@ Event log text -----------------> event_log_parser.py
 2. The adapter extracts known security indicators in their original order and
    removes duplicates.
 3. `framework_mapper.map_keyword()` maps each indicator to OWASP and MITRE.
-4. `llm_analyzer.analyze_findings()` uses Gemini only when an API key is
+4. The consent and domain-verification guard chain confirms that the target is
+   approved and in scope before an active scan begins.
+5. `llm_analyzer.analyze_findings()` uses Gemini only when an API key is
    configured; otherwise it returns an offline rule-based summary.
-5. `report_generator.generate_report()` serializes the result in the requested
+6. `report_generator.generate_report()` serializes the result in the requested
    format.
-6. The pipeline returns the keywords, findings, analysis, and rendered report
+7. The pipeline returns the keywords, findings, analysis, and rendered report
    so callers can inspect structured data as well as the final output.
 
 ## External Data and Configuration

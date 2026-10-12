@@ -194,6 +194,32 @@ def map_keyword_to_technique(keyword, sources=None, domain=None):
     return None
 
 
+def map_keyword(keyword, domain=None, mitre_domain=None):
+    """
+    Compatibility wrapper for callers that expect a single public
+    ``map_keyword`` entry point directly from ``mitre_mapper``.
+
+    The project's higher-level wrapper in ``framework_mapper`` returns a
+    combined dictionary shaped like::{
+        "keyword": <input>,
+        "mitre": <technique or None>
+    }
+
+    This function preserves that contract so tests and downstream code can
+    import ``map_keyword`` directly from the MITRE module.
+    """
+    if mitre_domain is not None and domain is None:
+        domain = mitre_domain
+
+    if keyword is None or not isinstance(keyword, str):
+        return {"keyword": keyword, "mitre": None}
+
+    return {
+        "keyword": keyword,
+        "mitre": map_keyword_to_technique(keyword, domain=domain),
+    }
+
+
 if __name__ == "__main__":
     test_keywords = ["phishing", "powershell", "made up nonsense technique"]
     for kw in test_keywords:

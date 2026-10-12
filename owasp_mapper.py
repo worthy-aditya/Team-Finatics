@@ -7,16 +7,20 @@ to its corresponding OWASP Top 10:2025 category, using data/owasp_top10.json.
 
 import json
 import os
+import re
 
-DEFAULT_DATA_PATH = os.path.join("data", "owasp_top10.json")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_DATA_PATH = os.path.join(BASE_DIR, "data", "owasp_top10.json")
 
 # Keyword -> OWASP 2025 rank lookup table
 KEYWORD_MAP = {
     "access control": "A01:2025",
+    "broken access control": "A01:2025",
     "bola": "A01:2025",
     "bfla": "A01:2025",
     "ssrf": "A01:2025",
     "unauthorized": "A01:2025",
+    "unauthorized access": "A01:2025",
 
     "misconfiguration": "A02:2025",
     "default credentials": "A02:2025",
@@ -25,18 +29,22 @@ KEYWORD_MAP = {
 
     "supply chain": "A03:2025",
     "dependency": "A03:2025",
+    "dependency vulnerability": "A03:2025",
     "third-party": "A03:2025",
     "third party": "A03:2025",
+    "third-party library": "A03:2025",
     "outdated component": "A03:2025",
 
     "crypto": "A04:2025",
     "encryption": "A04:2025",
     "weak hash": "A04:2025",
     "cleartext": "A04:2025",
+    "cleartext credentials": "A04:2025",
 
     "injection": "A05:2025",
     "sql injection": "A05:2025",
     "xss": "A05:2025",
+    "cross-site scripting": "A05:2025",
     "command injection": "A05:2025",
 
     "insecure design": "A06:2025",
@@ -47,6 +55,8 @@ KEYWORD_MAP = {
     "password": "A07:2025",
     "session": "A07:2025",
     "brute force": "A07:2025",
+    "authentication bypass": "A07:2025",
+    "session fixation": "A07:2025",
 
     "integrity": "A08:2025",
     "ci/cd": "A08:2025",
@@ -54,13 +64,32 @@ KEYWORD_MAP = {
     "deserialization": "A08:2025",
 
     "logging": "A09:2025",
+    "improper logging": "A09:2025",
     "monitoring": "A09:2025",
+    "insufficient monitoring": "A09:2025",
     "alerting": "A09:2025",
 
     "exception": "A10:2025",
     "error handling": "A10:2025",
     "crash": "A10:2025",
     "fail open": "A10:2025",
+}
+
+
+def _normalize_keyword_text(value):
+    """Normalize security keywords so punctuation and separators don't block matching."""
+    if value is None:
+        return ""
+    text = str(value).strip().lower()
+    text = text.replace("_", " ").replace("-", " ")
+    text = re.sub(r"[^a-z0-9\s/]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+NORMALIZED_KEYWORD_MAP = {
+    _normalize_keyword_text(key): value
+    for key, value in KEYWORD_MAP.items()
 }
 
 
@@ -121,14 +150,16 @@ def map_keyword_to_owasp(keyword, owasp_data=None):
     if owasp_data is None:
         owasp_data = load_owasp_data()
 
-    keyword_lower = keyword.strip().lower()
+    keyword_lower = _normalize_keyword_text(keyword)
+    if not keyword_lower:
+        return None
 
     matched_rank = None
     # Sort by length descending so more specific phrases match before
     # shorter, more general ones (e.g. "sql injection" before "injection")
-    for key in sorted(KEYWORD_MAP, key=len, reverse=True):
+    for key in sorted(NORMALIZED_KEYWORD_MAP, key=len, reverse=True):
         if key in keyword_lower:
-            matched_rank = KEYWORD_MAP[key]
+            matched_rank = NORMALIZED_KEYWORD_MAP[key]
             break
 
     if not matched_rank:
@@ -139,6 +170,21 @@ def map_keyword_to_owasp(keyword, owasp_data=None):
             return category
 
     return None
+
+
+def map_keyword(keyword, owasp_data=None):
+    """
+    Compatibility wrapper for callers that import ``map_keyword`` directly
+    from ``owasp_mapper`` and expect the combined record shape used across
+    the project.
+    """
+    if keyword is None or not isinstance(keyword, str):
+        return {"keyword": keyword, "owasp": None}
+
+    return {
+        "keyword": keyword,
+        "owasp": map_keyword_to_owasp(keyword, owasp_data=owasp_data),
+    }
 
 
 if __name__ == "__main__":

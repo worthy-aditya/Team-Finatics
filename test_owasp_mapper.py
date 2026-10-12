@@ -59,3 +59,10 @@ def test_case_insensitivity():
     result_lower = map_keyword_to_owasp("sql injection")
     result_upper = map_keyword_to_owasp("SQL INJECTION")
     assert result_lower == result_upper
+
+
+def test_alias_variants_are_normalized():
+    assert map_keyword_to_owasp("default-credentials")["rank"] == "A02:2025"
+    assert map_keyword_to_owasp("cross_site_scripting")["rank"] == "A05:2025"
+    assert map_keyword_to_owasp("weak-password")["rank"] == "A07:2025"
+    assert map_keyword_to_owasp("outdated_dependency")["rank"] == "A03:2025"
