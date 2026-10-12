@@ -11,6 +11,12 @@ from sentinelai.prompt_engine import (
 )
 from sentinelai.routing import auto_parse_to_file, is_raw_log_export, recommend_provider, route_provider
 from sentinelai.dashboard import build_dashboard
+from sentinelai.health_history import (
+    DEFAULT_HISTORY_PATH,
+    load_history,
+    record_snapshot,
+    summarize_trends,
+)
 
 
 # Free providers the team actually uses right now; others are accepted by the
@@ -29,7 +35,8 @@ LLM_CHOICES = ["gemini", "ollama", "openai", "claude"]
 @click.option("--no-save", is_flag=True, help="Print analysis without saving a Markdown file")
 @click.option("--provider-scores", "provider_scores_json", default=None, help="JSON file with provider health scores {<provider>: <score>} used for health-aware routing (Day 52)")
 @click.option("--dashboard", is_flag=True, help="Print the provider health dashboard and exit (no analysis)")
-def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_save, provider_scores_json, dashboard):
+@click.option("--health-history", is_flag=True, help="With --dashboard: record current scores to the history file and show per-provider trends (Day 54)")
+def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_save, provider_scores_json, dashboard, health_history):
     """Analyze saved Nmap scan or Windows Event Log JSON via an LLM (--llm gemini|ollama)."""
     # Day 4 sync: this root entry point must behave EXACTLY like
     # sentinelai/cli.py's analyze (same --routing / --model / --no-save /
@@ -49,7 +56,15 @@ def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_sa
 
     # Day 53: --dashboard short-circuits analysis to show provider health.
     if dashboard:
-        click.echo(build_dashboard(provider_scores or None))
+        trends = None
+        if health_history:
+            # Day 54: persist the current scores as a snapshot, then show how
+            # each provider is trending relative to its recent history.
+            snapshot_scores = provider_scores or {"gemini": 80.0, "ollama": 78.0, "deepseek": 85.0}
+            record_snapshot(snapshot_scores, path=DEFAULT_HISTORY_PATH)
+            info(f"Recorded provider health snapshot to {DEFAULT_HISTORY_PATH}")
+            trends = summarize_trends(load_history(DEFAULT_HISTORY_PATH))
+        click.echo(build_dashboard(provider_scores or None, trends=trends))
         return
 
     effective_llm = None

@@ -5,7 +5,7 @@ scores, and eligibility status in a formatted table.
 """
 
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sentinelai.routing import (
     get_all_providers,
@@ -25,12 +25,18 @@ def _get_provider_name(provider: str, registry: Dict[str, Dict[str, Any]]) -> st
     return info.get("name", provider)
 
 
-def build_dashboard(provider_scores: Dict[str, float] = None) -> str:
+def build_dashboard(
+    provider_scores: Dict[str, float] = None,
+    trends: Optional[Dict[str, str]] = None,
+) -> str:
     """Build a formatted health dashboard for all providers.
 
     Args:
         provider_scores: Optional dict of provider_name -> health_score.
             If None, default scores are used.
+        trends: Optional dict of provider_name -> trend label (Day 54). When
+            provided, an extra "Trend" column is appended to the table. When
+            omitted, the output is identical to the Day 53 dashboard.
 
     Returns:
         Formatted string showing provider health dashboard.
@@ -41,8 +47,12 @@ def build_dashboard(provider_scores: Dict[str, float] = None) -> str:
     registry = get_provider_registry()
     providers = get_all_providers()
 
+    show_trends = trends is not None
+
     # Build table header
     header = f"{'Provider':<16} {'Type':<8} {'Score':>6} {'Healthy':>8}  Status"
+    if show_trends:
+        header += f"  {'Trend':<10}"
     separator = "-" * len(header)
 
     lines = [header, separator]
@@ -56,10 +66,16 @@ def build_dashboard(provider_scores: Dict[str, float] = None) -> str:
         status = "OK" if healthy else "LOW"
 
         line = f"{name:<16} {ptype:<8} {_format_score(score):>6} {str(healthy):>8}  {status}"
+        if show_trends:
+            trend = trends.get(provider, "unknown")
+            line += f"  {trend:<10}"
         lines.append(line)
 
     lines.append(separator)
-    lines.append(f"{'Total providers':<16} {'':<8} {'':>6} {'':>8}  {len(providers)}")
+    total = f"{'Total providers':<16} {'':<8} {'':>6} {'':>8}  {len(providers)}"
+    if show_trends:
+        total += f"  {'':<10}"
+    lines.append(total)
 
     return "\n".join(lines)
 
