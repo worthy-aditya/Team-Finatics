@@ -1,4 +1,6 @@
 import click
+import json
+from typing import Dict
 
 from sentinelai.ui import error, info, print_markdown, spinner, success
 from sentinelai.prompt_engine import (
@@ -7,7 +9,7 @@ from sentinelai.prompt_engine import (
     analyze_scan_file,
     resolve_provider,
 )
-from sentinelai.routing import auto_parse_to_file, is_raw_log_export, route_provider
+from sentinelai.routing import auto_parse_to_file, is_raw_log_export, recommend_provider, route_provider
 
 
 # Free providers the team actually uses right now; others are accepted by the
@@ -24,15 +26,37 @@ LLM_CHOICES = ["gemini", "ollama", "openai", "claude"]
 @click.option("--model", default=None, help="Preferred model for the chosen provider")
 @click.option("--mode", type=click.Choice(["standard", "beginner", "remediation"], case_sensitive=False), default="standard", show_default=True, help="Analysis mode: standard risk report, remediation plan (event logs + scans), or beginner-friendly")
 @click.option("--no-save", is_flag=True, help="Print analysis without saving a Markdown file")
-def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_save):
+@click.option("--provider-scores", "provider_scores_json", default=None, help="JSON file with provider health scores {<provider>: <score>} used for health-aware routing (Day 52)")
+def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_save, provider_scores_json):
     """Analyze saved Nmap scan or Windows Event Log JSON via an LLM (--llm gemini|ollama)."""
     # Day 4 sync: this root entry point must behave EXACTLY like
     # sentinelai/cli.py's analyze (same --routing / --model / --no-save /
     # raw-export auto-parse) so both CLIs produce identical results.
     kind_label = "event log" if kind == "events" else "scan"
     info(f"Analyzing {kind_label} file: {input_file}")
-    effective_llm = route_provider(llm_name, routing)
-    info(f"LLM provider: {effective_llm}")
+
+    # Day 52: use health-aware provider routing. When health scores are not
+    # supplied, the legacy --routing policy (report -> gemini, private ->
+    # ollama) governs. When scores are available, they rank providers and the
+    # top one wins, subject to the routing sensitivity constraint.
+    provider_scores: Dict[str, float] = {}
+    if provider_scores_json:
+        with open(provider_scores_json, encoding="utf-8") as _fh:
+            provider_scores = json.load(_fh)
+            info(f"Loaded provider health scores: {provider_scores}")
+
+    effective_llm = None
+    if provider_scores:
+        effective_llm = recommend_provider(
+            routing=routing,
+            is_sensitive=(routing == "private"),
+            has_api_key=(llm_name in (None, "gemini")),
+            provider_scores=provider_scores,
+        )
+        info(f"LLM provider (health-aware): {effective_llm}")
+    else:
+        effective_llm = route_provider(llm_name, routing)
+        info(f"LLM provider: {effective_llm}")
     info(f"Mode: {mode}")
 
     try:

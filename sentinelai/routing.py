@@ -1,13 +1,14 @@
-"""sentinelai/routing.py - Day 21 (Week 3).
+"""sentinelai/routing.py - Day 52 (Week 8).
 
-Small, pure helpers that let `sentinelai analyze --kind events` accept a RAW
-Windows event-log export (CSV / EVTX) directly and route it to the right LLM
-provider - no manual `parse` step and no guessing.
+Provider routing helpers extended to use Day 51 health scoring.
 
-  * route_provider(): maps `--routing report|private` to a provider, with an
-    explicit `--llm` winning over routing.
+  * route_provider(): maps --routing report|private to a provider, with an
+    explicit --llm winning over routing.
     - report  -> gemini (rich, analyst-facing - Day 20 recommendation)
     - private -> ollama (data stays on the host - zero cloud egress)
+  * recommend_provider(): health-aware routing. When provider health scores
+    (from provider_health.py) are supplied, they are ranked and the top
+    provider is returned for the task, subject to sensitivity constraints.
   * is_raw_log_export(): detects .csv/.evtx inputs.
   * load_event_input(): turns a raw export into analysis-ready schema JSON
     (via sentinelai.log_parser) and passes already-structured JSON through.
@@ -16,11 +17,20 @@ provider - no manual `parse` step and no guessing.
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+# Ensure the project root is on sys.path when this module is imported
+# directly (e.g. from tests or a standalone script), so the top-level
+# provider_health.py can be imported.
+_ROOT_PATH = str(Path(__file__).resolve().parent.parent)
+if _ROOT_PATH not in sys.path:
+    sys.path.insert(0, _ROOT_PATH)
 
 from sentinelai.log_parser import parse_logs
+from provider_health import recommend_provider_for_task
 
 # Day 20 conclusion: use gemini for analyst-facing report work, ollama when the
 # log data must not leave the host.
@@ -38,7 +48,9 @@ def route_provider(llm_name: Optional[str] = None, routing: Optional[str] = None
     """Resolve the effective provider name.
 
     Priority: explicit ``llm_name`` > ``routing`` policy > DEFAULT_PROVIDER.
-    ``routing`` is validated against ROUTING_PROVIDER keys first.
+    ``routing`` is validated against ROUTING_PROVIDER keys first. This is the
+    backward-compatible Day 20-21 routing function; it does not consult health
+    scores so that Day 20 behavior is unchanged for callers that rely on it.
     """
     if llm_name:
         return llm_name.strip().lower()
@@ -51,6 +63,84 @@ def route_provider(llm_name: Optional[str] = None, routing: Optional[str] = None
             )
         return ROUTING_PROVIDER[routing]
     return DEFAULT_PROVIDER
+
+
+def recommend_provider(
+    routing: Optional[str] = None,
+    is_sensitive: bool = False,
+    has_api_key: bool = False,
+    provider_scores: Optional[Dict[str, float]] = None,
+) -> str:
+    """Return the single best provider for a task, combining routing policy
+    with Day 51 provider health scoring.
+
+    Behavior:
+    - An explicit ``routing`` policy ('report' or 'private') is honoured first
+      for sensitivity constraints, but the final choice among eligible
+      providers is the one with the highest health score.
+    - If no routing policy is given, the provider with the highest score
+      wins unconditionally.
+
+    Returns the provider name (e.g. 'gemini' or 'ollama') chosen for analysis.
+    """
+    # Validate any routing policy before using it.
+    if routing is not None and routing.strip().lower() not in ROUTING_PROVIDER:
+        raise ValueError(
+            f"Unknown routing policy '{routing}'. Valid: {', '.join(sorted(ROUTING_PROVIDER))}."
+        )
+
+    # Fall back to a minimal health snapshot when none supplied.
+    if provider_scores is None:
+        provider_scores = {"gemini": 80.0, "ollama": 78.0}
+
+    # When a routing policy is set, only eligible providers may be chosen.
+    if routing is not None:
+        policy = routing.strip().lower()
+        eligible: List[str] = []
+        for provider, score in provider_scores.items():
+            if policy == "report" and provider == "ollama":
+                continue  # privacy-sensitive cloud provider not allowed for reports
+            if policy == "private" and provider == "gemini":
+                continue  # cloud provider discouraged for private data
+            eligible.append(provider)
+        if not eligible:
+            # No provider satisfies this policy; fall back to the overall best.
+            eligible = list(provider_scores.keys())
+        return _select_best_provider(eligible, provider_scores, is_sensitive, has_api_key)
+
+    # No routing policy: pick the provider with the single highest health score.
+    return _select_best_provider(list(provider_scores.keys()), provider_scores, is_sensitive, has_api_key)
+
+
+def _select_best_provider(
+    eligible: List[str],
+    provider_scores: Dict[str, float],
+    is_sensitive: bool,
+    has_api_key: bool,
+) -> str:
+    """Rank eligible providers and return the top one.
+
+    Applies sensitivity adjustments consistent with provider_health.py:
+    - Gemini (cloud) is penalised for sensitive data (-15)
+    - Ollama (local) is preferred for non-sensitive data (+5)
+    - Reports with an API key favour Gemini (+10)
+    Returns the provider name with the highest adjusted score.
+    """
+    ranked = []
+    for provider in eligible:
+        score = float(provider_scores[provider])
+        adjusted = score
+        # Day 51 sensitivity rules (consistent with provider_health.py)
+        if is_sensitive and provider == "gemini":
+            adjusted -= 15  # cloud provider penalised for sensitive data
+        if not is_sensitive and provider == "ollama":
+            adjusted += 5  # local provider preferred for non-sensitive data
+        # Reports with API key: gemini gets a bonus (rich cloud model)
+        if not is_sensitive and provider == "gemini" and has_api_key:
+            adjusted += 10
+        ranked.append((provider, round(max(0.0, min(100.0, adjusted)), 2)))
+    ranked.sort(key=lambda item: item[1], reverse=True)
+    return ranked[0][0]
 
 
 def is_raw_log_export(path: str) -> bool:
