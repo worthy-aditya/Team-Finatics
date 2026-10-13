@@ -26,6 +26,7 @@ from sentinelai.health_history import (
 from sentinelai.health_alerts import build_alerts_report, detect_alerts
 from sentinelai.health_router import recommend_healthy_provider
 from sentinelai.health_profiles import load_profile as load_health_profile
+from sentinelai.health_command import build_health_command
 from sentinelai.logs_command import build_logs_command
 from commands.report import report as report_command
 from sentinelai.prompt_engine import (
@@ -350,6 +351,9 @@ main.add_command(build_logs_command())
 # Day 25 parity: `report` lived only on the root CLI. The one-command E2E
 # pipeline needs it on BOTH entry points, so reuse the same implementation.
 main.add_command(report_command)
+# Day 58 parity: the `health` command group (profiles + status) is registered
+# on BOTH entry points via the shared factory, like `logs` and `report`.
+main.add_command(build_health_command())
 
 
 if __name__ == "__main__":

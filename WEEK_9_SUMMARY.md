@@ -9,6 +9,7 @@
 | Day | Planned focus | Status | Evidence / report |
 |---|---|---|---|
 | 57 | Save/load/list/delete named provider-health profiles; `--profile` for analyze | Complete | [WEEK_9_DAY_57_REPORT.md](WEEK_9_DAY_57_REPORT.md) |
+| 58 | Add a `health` command group (profiles/save/show/delete/status) on both CLIs | Complete | [WEEK_9_DAY_58_REPORT.md](WEEK_9_DAY_58_REPORT.md) |
 
 ## Day 57 - Provider Health Profiles (Complete)
 
@@ -27,3 +28,23 @@
   - Added tests in `tests/test_day57_health_profiles.py`.
 - **Validation:** Day 57 tests: 16 passed (direct + pytest). CLI parity (`test_cli_sync.py`): 6 passed. Full test suite: 278 passed (was 262, +16; offline; no LLM or network calls). Verified end-to-end: a saved `degraded` profile fed the dashboard (ollama flagged LOW); a missing profile errored cleanly.
 - **Report:** [WEEK_9_DAY_57_REPORT.md](WEEK_9_DAY_57_REPORT.md).
+
+## Day 58 - `health` Command Group (Complete)
+
+- **Task:** Give provider health a first-class CLI home: expose profile
+  management and a combined dashboard+alerts view as a `health` command group on
+  BOTH CLI entry points.
+- **Delivered:**
+  - Added `sentinelai/health_command.py` (new, offline): `build_health_command()`
+    factory returning a `health` Click group with `profiles`, `save`,
+    `show`, `delete`, and `status` subcommands (status renders the dashboard,
+    optionally with trends via `--record`, followed by the alerts report).
+  - Registered `health` on both `sentinelai/cli.py` (`main`) and the root
+    `sentinelai.py` (`cli`) via the shared factory (mirrors `logs`/`report`).
+  - Added tests in `tests/test_day58_health_command.py` (12 CliRunner tests,
+    run in an isolated working dir).
+- **Validation:** Day 58 tests: 12 passed. CLI parity (`test_cli_sync.py`): 6
+  passed. Full test suite: 290 passed (was 278, +12; offline; no LLM or network
+  calls). Verified end-to-end: `health --help`, save/show/profiles round-trip,
+  and `health status` dashboard+alerts all work from both entry points.
+- **Report:** [WEEK_9_DAY_58_REPORT.md](WEEK_9_DAY_58_REPORT.md).
