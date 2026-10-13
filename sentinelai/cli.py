@@ -25,6 +25,7 @@ from sentinelai.health_history import (
 )
 from sentinelai.health_alerts import build_alerts_report, detect_alerts
 from sentinelai.health_router import recommend_healthy_provider
+from sentinelai.health_profiles import load_profile as load_health_profile
 from sentinelai.logs_command import build_logs_command
 from commands.report import report as report_command
 from sentinelai.prompt_engine import (
@@ -182,7 +183,8 @@ def scan(target, aggressive, fast, timeout, output_json, json_file, require_conf
 @click.option("--dashboard", is_flag=True, help="Print the provider health dashboard and exit (no analysis)")
 @click.option("--health-history", is_flag=True, help="With --dashboard: record current scores to the history file and show per-provider trends (Day 54)")
 @click.option("--alerts", is_flag=True, help="Print actionable provider health alerts (critical/degrading) from recorded history and exit (Day 55)")
-def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_save, provider_scores_json, dashboard, health_history, alerts):
+@click.option("--profile", "profile_name", default=None, help="Load a saved provider-health profile by name as the provider scores (Day 57; ignored if --provider-scores is given)")
+def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_save, provider_scores_json, dashboard, health_history, alerts, profile_name):
     """Analyze saved Nmap scan or Windows Event Log JSON via an LLM (--llm gemini|ollama).
 
     When --provider-scores is given, provider health scores (from Day 51) are
@@ -201,6 +203,14 @@ def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_sa
         with open(provider_scores_json, encoding="utf-8") as _fh:
             provider_scores = json.load(_fh)
             info(f"Loaded provider health scores: {provider_scores}")
+    elif profile_name:
+        # Day 57: load a named health profile as the provider scores.
+        try:
+            provider_scores = load_health_profile(profile_name)
+        except (FileNotFoundError, ValueError) as exc:
+            error(f"Could not load provider health profile: {exc}")
+            raise click.Abort()
+        info(f"Loaded provider health profile '{profile_name}': {provider_scores}")
 
     # Day 53: --dashboard short-circuits analysis to show provider health.
     if dashboard:
