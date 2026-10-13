@@ -24,6 +24,7 @@ from sentinelai.health_history import (
     summarize_trends,
 )
 from sentinelai.health_alerts import build_alerts_report, detect_alerts
+from sentinelai.health_router import recommend_healthy_provider
 from sentinelai.logs_command import build_logs_command
 from commands.report import report as report_command
 from sentinelai.prompt_engine import (
@@ -228,13 +229,21 @@ def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_sa
 
     effective_llm = None
     if provider_scores:
-        effective_llm = recommend_provider(
+        # Day 56: health-gated selection quarantines providers below the
+        # healthy threshold so a sick provider is skipped when a healthy
+        # alternative exists.
+        choice = recommend_healthy_provider(
             routing=routing,
             is_sensitive=(routing == "private"),
             has_api_key=(llm_name in (None, "gemini")),
             provider_scores=provider_scores,
         )
-        info(f"LLM provider (health-aware): {effective_llm}")
+        effective_llm = choice.provider
+        if choice.quarantined:
+            info(f"Quarantined unhealthy providers: {', '.join(choice.quarantined)}")
+        if choice.all_unhealthy:
+            warn(f"No healthy provider available; using least-bad: {effective_llm}")
+        info(f"LLM provider (health-gated): {effective_llm}")
     else:
         effective_llm = route_provider(llm_name, routing)
         info(f"LLM provider: {effective_llm}")
