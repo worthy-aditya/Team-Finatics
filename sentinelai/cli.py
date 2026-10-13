@@ -23,6 +23,7 @@ from sentinelai.health_history import (
     record_snapshot,
     summarize_trends,
 )
+from sentinelai.health_alerts import build_alerts_report, detect_alerts
 from sentinelai.logs_command import build_logs_command
 from commands.report import report as report_command
 from sentinelai.prompt_engine import (
@@ -179,7 +180,8 @@ def scan(target, aggressive, fast, timeout, output_json, json_file, require_conf
 @click.option("--provider-scores", "provider_scores_json", default=None, help="JSON file with provider health scores {<provider>: <score>} used for health-aware routing (Day 52)")
 @click.option("--dashboard", is_flag=True, help="Print the provider health dashboard and exit (no analysis)")
 @click.option("--health-history", is_flag=True, help="With --dashboard: record current scores to the history file and show per-provider trends (Day 54)")
-def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_save, provider_scores_json, dashboard, health_history):
+@click.option("--alerts", is_flag=True, help="Print actionable provider health alerts (critical/degrading) from recorded history and exit (Day 55)")
+def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_save, provider_scores_json, dashboard, health_history, alerts):
     """Analyze saved Nmap scan or Windows Event Log JSON via an LLM (--llm gemini|ollama).
 
     When --provider-scores is given, provider health scores (from Day 51) are
@@ -210,6 +212,18 @@ def analyze(input_file, output_file, kind, llm_name, routing, model, mode, no_sa
             info(f"Recorded provider health snapshot to {DEFAULT_HISTORY_PATH}")
             trends = summarize_trends(load_history(DEFAULT_HISTORY_PATH))
         click.echo(build_dashboard(provider_scores or None, trends=trends))
+        return
+
+    # Day 55: --alerts short-circuits analysis to surface actionable health
+    # alerts (critical below-threshold or degrading) from recorded history.
+    if alerts:
+        if health_history:
+            # Optionally record the current scores first so alerts reflect them.
+            snapshot_scores = provider_scores or {"gemini": 80.0, "ollama": 78.0, "deepseek": 85.0}
+            record_snapshot(snapshot_scores, path=DEFAULT_HISTORY_PATH)
+            info(f"Recorded provider health snapshot to {DEFAULT_HISTORY_PATH}")
+        history = load_history(DEFAULT_HISTORY_PATH)
+        click.echo(build_alerts_report(detect_alerts(history)))
         return
 
     effective_llm = None

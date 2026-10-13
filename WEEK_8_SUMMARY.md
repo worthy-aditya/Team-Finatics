@@ -1,8 +1,8 @@
-# Week 8 - Daily Summary (Days 50-54)
+# Week 8 - Daily Summary (Days 50-55)
 
 **Project:** SentinelAI CLI · Team Finatics  
 **Started:** 2026-10-12  
-**Purpose:** Week 8 begins with the automatic fallback milestone. Day 50 closes the gap where the project could retry other model candidates inside a provider, but not switch to the alternate active provider when the primary provider failed. Days 51-53 then layer on provider health scoring, health-aware routing, a provider registry + health dashboard, and finally longitudinal health history + trend tracking.
+**Purpose:** Week 8 begins with the automatic fallback milestone. Day 50 closes the gap where the project could retry other model candidates inside a provider, but not switch to the alternate active provider when the primary provider failed. Days 51-53 then layer on provider health scoring, health-aware routing, a provider registry + health dashboard, longitudinal health history + trend tracking, and finally proactive health alerting.
 
 ## At a Glance
 
@@ -13,6 +13,7 @@
 | 52 | Integrate provider health recommendations into CLI provider routing | Complete | [WEEK_8_DAY_52_REPORT.md](WEEK_8_DAY_52_REPORT.md) |
 | 53 | Add provider registry and CLI health dashboard (3+ providers) | Complete | [WEEK_8_DAY_53_REPORT.md](WEEK_8_DAY_53_REPORT.md) |
 | 54 | Record provider health history and classify per-provider trends | Complete | [WEEK_8_DAY_54_REPORT.md](WEEK_8_DAY_54_REPORT.md) |
+| 55 | Turn health history into actionable alerts (critical/degrading) | Complete | [WEEK_8_DAY_55_REPORT.md](WEEK_8_DAY_55_REPORT.md) |
 
 ## Day 50 - Secondary Provider Fallback
 
@@ -86,6 +87,26 @@ Observed output:
   6 passed. Day 53 dashboard regression: 9 passed (output unchanged).
 - **Report:** [WEEK_8_DAY_54_REPORT.md](WEEK_8_DAY_54_REPORT.md).
 
+## Day 55 - Provider Health Alerting (Complete)
+
+- **Task:** Turn recorded provider health history (Day 54) into actionable
+  alerts so operators are told when a provider needs attention, instead of
+  having to read the dashboard/trends manually.
+- **Delivered:**
+  - Added `sentinelai/health_alerts.py` (new, offline): `HealthAlert`,
+    `detect_alerts()` (critical = below the 70.0 healthy threshold; warning =
+    healthy but degrading; sorted most-severe first), `summarize_alerts()`, and
+    `build_alerts_report()`.
+  - Wired `--alerts` into both `commands/analyze.py` and `sentinelai/cli.py`
+    (kept in sync for `test_cli_sync.py`): prints the alerts report from the
+    recorded history and exits; with `--health-history` it records the current
+    scores first so alerts reflect the latest data.
+  - Added tests in `tests/test_day55_health_alerts.py` (13 tests).
+- **Validation:** Day 55 tests: 13 passed. Full test suite: 250 passed (was
+  237, +13; offline; no LLM or network calls). CLI parity (`test_cli_sync.py`):
+  6 passed.
+- **Report:** [WEEK_8_DAY_55_REPORT.md](WEEK_8_DAY_55_REPORT.md).
+
 ## Outcome
 
 Week 8 now has a complete provider ecosystem:
@@ -95,8 +116,11 @@ Week 8 now has a complete provider ecosystem:
 3. **Day 52:** Health-aware routing (automation)
 4. **Day 53:** Provider registry + health dashboard (management)
 5. **Day 54:** Health history + trend tracking (observability)
+6. **Day 55:** Proactive health alerting (critical / degrading)
 
 The system now supports 3 providers (gemini, ollama, deepseek), displays a
-real-time health dashboard via `sentinelai analyze --dashboard`, and records
+real-time health dashboard via `sentinelai analyze --dashboard`, records
 longitudinal health with per-provider trend classification via
-`sentinelai analyze --dashboard --health-history`.
+`sentinelai analyze --dashboard --health-history`, and surfaces actionable
+alerts (critical below-threshold or degrading providers) via
+`sentinelai analyze --alerts`.
